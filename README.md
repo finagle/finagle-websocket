@@ -34,6 +34,7 @@ sbt
   import com.twitter.finagle.builder.ClientBuilder
   import com.twitter.finagle.websocket.{WebSocket, WebSocketCodec}
   import com.twitter.concurrent.Broker
+  import java.net.URI
 
   val clientFactory = ClientBuilder()
     .codec(new WebSocketCodec)
@@ -43,15 +44,14 @@ sbt
 
   val outgoing = new Broker[String]
 
-  clientFactory() foreach { client =>
-    val socket = new WebSocket {
-      val messages = outgoing.recv
-      def release() = client.release()
-    }
+  val socket = new WebSocket {
+    val uri = new URI("ws://localhost:8080/")
+    val messages = outgoing.recv
+    def release() = client.release()
+  }
 
-    client(socket) foreach { resp =>
-      resp.messages foreach { incoming => ... }
-    }
+  client(socket) foreach { resp =>
+    resp.messages foreach println
   }
 
 ### Server
@@ -61,22 +61,24 @@ sbt
   import com.twitter.finagle.builder.ServerBuilder
   import com.twitter.finagle.websocket.{WebSocket, WebSocketCodec}
   import com.twitter.util.Future
-  import java.net.InetSocketAddress
+  import java.net.{InetSocketAddress, URI}
 
-  val service = new Service[WebSocket, WebSocket] {
+  val echoService = new Service[WebSocket, WebSocket] {
     def apply(req: WebSocket): Future[WebSocket] = {
       val outgoing = new Broker[String]
       val socket = new WebSocket {
+        val uri = req.uri
+        override val version = req.version
         val messages = outgoing.recv
         def release() = ()
       }
-      req.messages foreach { incoming => ... }
+      req.messages foreach { outgoing ! _ }
       Future.value(socket)
     }
   }
 
   val server = ServerBuilder()
-    .name("WebSocketService")
+    .name("EchoServer")
     .bindTo(new InetSocketAddress(8080))
     .codec(new WebSocketCodec)
-    .build(service)
+    .build(echoService)

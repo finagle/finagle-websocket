@@ -13,7 +13,7 @@ class WebSocketCodec(path: String = "/") extends CodecFactory[WebSocket, WebSock
           val pipeline = Channels.pipeline()
           pipeline.addLast("decoder", new HttpRequestDecoder)
           pipeline.addLast("encoder", new HttpResponseEncoder)
-          pipeline.addLast("handler", new WebSocketHandler(path))
+          pipeline.addLast("handler", new WebSocketServerHandler(path))
           pipeline
         }
       }
@@ -27,7 +27,7 @@ class WebSocketCodec(path: String = "/") extends CodecFactory[WebSocket, WebSock
           val pipeline = Channels.pipeline()
           pipeline.addLast("decoder", new HttpResponseDecoder)
           pipeline.addLast("encoder", new HttpRequestEncoder)
-          pipeline.addLast("handler", new WebSocketHandler(path))
+          pipeline.addLast("handler", new WebSocketClientHandler)
           pipeline
         }
       }
