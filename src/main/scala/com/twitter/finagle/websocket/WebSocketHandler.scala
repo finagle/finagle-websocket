@@ -53,13 +53,13 @@ class WebSocketHandler extends SimpleChannelHandler {
   }
 }
 
-class WebSocketServerHandler(path: String = "/") extends WebSocketHandler {
+class WebSocketServerHandler extends WebSocketHandler {
   @volatile private[this] var handshaker: Option[WebSocketServerHandshaker] = None
 
   override def messageReceived(ctx: ChannelHandlerContext, e: MessageEvent) = {
     e.getMessage match {
       case req: HttpRequest =>
-        val location = "ws://" + req.getHeader(HttpHeaders.Names.HOST) + path
+        val location = "ws://" + req.getHeader(HttpHeaders.Names.HOST) + "/"
         val wsFactory = new WebSocketServerHandshakerFactory(location, null, false)
         handshaker = Option(wsFactory.newHandshaker(req))
         handshaker match {
@@ -68,11 +68,10 @@ class WebSocketServerHandler(path: String = "/") extends WebSocketHandler {
           case Some(h) =>
             h.handshake(ctx.getChannel, req)
 
-            val webSocket = new WebSocket {
-              val uri = new URI(location)
-              def messages = messagesBroker.recv
-              def release() { closeBroker ! () }
-            }
+            val webSocket = WebSocket(
+              messages = messagesBroker.recv,
+              uri = new URI(req.getUri))
+            webSocket.onClose { _ => closeBroker ! () }
 
             Channels.fireMessageReceived(ctx, webSocket)
         }
@@ -98,11 +97,14 @@ class WebSocketServerHandler(path: String = "/") extends WebSocketHandler {
     e.getMessage match {
       case sock: WebSocket =>
         write(ctx, sock)
+
       case _: HttpResponse =>
         ctx.sendDownstream(e)
+
       case _: CloseWebSocketFrame =>
         ctx.sendDownstream(e)
         //TODO proper cleanup
+
       case invalid =>
         Channels.fireExceptionCaught(ctx,
           new IllegalArgumentException("invalid message \"%s\"".format(invalid)))
@@ -142,18 +144,16 @@ class WebSocketClientHandler extends WebSocketHandler {
   override def writeRequested(ctx: ChannelHandlerContext, e: MessageEvent) = {
     e.getMessage match {
       case sock: WebSocket =>
-        val webSocket: WebSocket = new WebSocket {
-          val uri = null
-          val messages = messagesBroker.recv
-          def release() { closeBroker ! () }
-        }
+        write(ctx, sock)
+
+        val webSocket = sock.copy(messages = messagesBroker.recv)
+        webSocket.onClose { _ => closeBroker ! () }
         Channels.fireMessageReceived(ctx, webSocket)
 
         val wsFactory = new WebSocketClientHandshakerFactory
         val hs = wsFactory.newHandshaker(sock.uri, sock.version, null, false, sock.headers)
         handshaker = Some(hs)
         hs.handshake(ctx.getChannel) { _ => e.getFuture.setSuccess() }
-        write(ctx, sock)
 
       case _: HttpRequest =>
         ctx.sendDownstream(e)

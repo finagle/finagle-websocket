@@ -6,7 +6,7 @@ object FinagleWebsockets extends Build {
   val baseSettings = Defaults.defaultSettings ++ Seq(
     resolvers += "twitter-repo" at "http://maven.twttr.com",
     libraryDependencies ++= Seq(
-      "com.twitter" % "finagle-core" % "6.0.3"
+      "com.twitter" % "finagle-core" % "6.1.0"
     ))
 
   lazy val buildSettings = Seq(
