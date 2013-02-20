@@ -26,7 +26,7 @@ object WebSocketServer extends DefaultServer[WS, WS, WS, WS](
   "websocketsrv", WebSocketListener, new SerialServerDispatcher(_, _)
 )
 
-object WebSocket extends Client[WS, WS] with Server[WS, WS] {
+object HttpWebSocket extends Client[WS, WS] with Server[WS, WS] {
   def newClient(group: Group[SocketAddress]): ServiceFactory[WS, WS] =
     WebSocketClient.newClient(group)
 
