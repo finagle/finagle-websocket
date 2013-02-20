@@ -38,6 +38,7 @@ object FinagleWebsockets extends Build {
   lazy val root = Project(id = "finagle-websockets",
     base = file("."),
     settings = Defaults.itSettings ++ baseSettings ++ buildSettings ++ publishSettings)
+      .settings(net.virtualvoid.sbt.graph.Plugin.graphSettings: _*)
       .configs( IntegrationTest)
 
 }
