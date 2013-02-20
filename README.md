@@ -29,7 +29,7 @@ sbt
 
     resolvers += "com.github.sprsquish" at "https://raw.github.com/sprsquish/mvn-repo/master"
 
-    "com.github.sprsquish" % "finagle-websockets" % "0.0.1"
+    "com.github.sprsquish" % "finagle-websockets" % "6.1.0"
 
 ### Client
 
