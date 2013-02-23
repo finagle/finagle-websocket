@@ -6,12 +6,12 @@ object FinagleWebsockets extends Build {
   val baseSettings = Defaults.defaultSettings ++ Seq(
     resolvers += "twitter-repo" at "http://maven.twttr.com",
     libraryDependencies ++= Seq(
-      "com.twitter" %% "finagle-core" % "6.1.0"
+      "com.twitter" %% "finagle-core" % "6.2.0"
     ))
 
   lazy val buildSettings = Seq(
     organization := "com.github.sprsquish",
-    version := "6.1.1-SNAPSHOT",
+    version := "6.2.1-SNAPSHOT",
     crossScalaVersions := Seq("2.9.2", "2.10.0")
   )
 
