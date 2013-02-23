@@ -4,7 +4,7 @@ import com.twitter.concurrent.{Offer, Broker}
 import com.twitter.finagle.channel.BrokerChannelHandler
 import com.twitter.finagle.netty3.Conversions._
 import com.twitter.finagle.netty3.{Cancelled, Ok, Error}
-import com.twitter.util.{Try, Return, Throw}
+import com.twitter.util.{Promise, Return, Throw, Try}
 import java.net.URI
 import org.jboss.netty.buffer.ChannelBuffer
 import org.jboss.netty.channel._
@@ -15,8 +15,7 @@ import scala.collection.JavaConversions._
 
 class WebSocketHandler extends SimpleChannelHandler {
   protected[this] val messagesBroker = new Broker[String]
-  protected[this] val closeBroker = new Broker[Unit]
-  protected[this] val close = closeBroker.recv
+  protected[this] val closer = new Promise[Unit]
 
   protected[this] def write(
     ctx: ChannelHandlerContext,
@@ -24,7 +23,7 @@ class WebSocketHandler extends SimpleChannelHandler {
     ack: Option[Offer[Try[Unit]]] = None
   ) {
     def close() {
-      sock.release()
+      sock.close()
       if (ctx.getChannel.isOpen) ctx.getChannel.close()
     }
 
@@ -49,7 +48,7 @@ class WebSocketHandler extends SimpleChannelHandler {
   }
 
   override def channelClosed(ctx: ChannelHandlerContext, e: ChannelStateEvent) {
-    closeBroker ! ()
+    closer.setValue(())
   }
 }
 
@@ -68,10 +67,13 @@ class WebSocketServerHandler extends WebSocketHandler {
           case Some(h) =>
             h.handshake(ctx.getChannel, req)
 
+            def close() { Channels.close(ctx.getChannel) }
+
             val webSocket = WebSocket(
               messages = messagesBroker.recv,
-              uri = new URI(req.getUri))
-            webSocket.onClose { _ => closeBroker ! () }
+              uri = new URI(req.getUri),
+              onClose = closer,
+              close = close)
 
             Channels.fireMessageReceived(ctx, webSocket)
         }
@@ -146,8 +148,13 @@ class WebSocketClientHandler extends WebSocketHandler {
       case sock: WebSocket =>
         write(ctx, sock)
 
-        val webSocket = sock.copy(messages = messagesBroker.recv)
-        webSocket.onClose { _ => closeBroker ! () }
+        def close() { Channels.close(ctx.getChannel) }
+
+        val webSocket = sock.copy(
+          messages = messagesBroker.recv,
+          onClose = closer,
+          close = close)
+
         Channels.fireMessageReceived(ctx, webSocket)
 
         val wsFactory = new WebSocketClientHandshakerFactory

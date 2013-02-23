@@ -10,7 +10,5 @@ case class WebSocket(
   uri: URI,
   headers: Map[String, String] = Map.empty[String, String],
   version: WebSocketVersion = WebSocketVersion.V13,
-  release: Promise[Unit] = new Promise[Unit])
-{
-  def onClose = release.onSuccess(_)
-}
+  onClose: Future[Unit] = new Promise[Unit],
+  close: () => Unit = { () => () })

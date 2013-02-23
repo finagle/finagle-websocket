@@ -37,7 +37,7 @@ sbt
     import com.twitter.concurrent.Broker
 
     val out = new Broker[String]
-    HttpWebSocket.open(out.recv, "ws://localhost:8080") onSuccess { resp =>
+    HttpWebSocket.open(out.recv, "ws://localhost:8080/") onSuccess { resp =>
       resp.messages foreach println
     }
 
