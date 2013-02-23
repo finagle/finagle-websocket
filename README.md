@@ -34,18 +34,10 @@ sbt
 ### Client
 
     import com.twitter.finagle.HttpWebSocket
-    import com.twitter.finagle.websocket.WebSocket
     import com.twitter.concurrent.Broker
-    import java.net.URI
 
-    val client = HttpWebSocket.newClient("localhost:8080").toService
-    val outgoing = new Broker[String]
-
-    val socket = WebSocket(
-      messages = outgoing.recv,
-      uri = new URI("ws://localhost:8080/"))
-
-    client(socket) foreach { resp =>
+    val out = new Broker[String]
+    HttpWebSocket.open(out.recv, "ws://localhost:8080") onSuccess { resp =>
       resp.messages foreach println
     }
 

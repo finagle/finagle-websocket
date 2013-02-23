@@ -1,35 +1,52 @@
 package com.twitter.finagle
 
-import com.twitter.finagle.websocket.{WebSocket => WS}
+import com.twitter.finagle.websocket.{WebSocket, WebSocketCodec}
 import com.twitter.finagle.client._
 import com.twitter.finagle.dispatch.{SerialServerDispatcher, SerialClientDispatcher}
 import com.twitter.finagle.netty3._
 import com.twitter.finagle.server._
-import java.net.SocketAddress
+import com.twitter.concurrent.Offer
+import com.twitter.util.Future
+import java.net.{SocketAddress, URI}
 
-object WebSocketTransporter extends Netty3Transporter[WS, WS](
-  websocket.WebSocketCodec().client(ClientCodecConfig("websocketclient")).pipelineFactory
+trait WebSocketRichClient {
+  def open(out: Offer[String], uri: String): Future[WebSocket] =
+    open(out, new URI(uri))
+
+  def open(out: Offer[String], uri: URI): Future[WebSocket] = {
+    val socket = WebSocket(messages = out, uri = uri)
+    val addr = uri.getHost + ":" + uri.getPort
+    HttpWebSocket.newClient(addr).toService(socket)
+  }
+}
+
+object WebSocketTransporter extends Netty3Transporter[WebSocket, WebSocket](
+  WebSocketCodec().client(ClientCodecConfig("websocketclient")).pipelineFactory
 )
 
-object WebSocketClient extends DefaultClient[WS, WS](
+object WebSocketClient extends DefaultClient[WebSocket, WebSocket](
   name = "websocket",
-  endpointer = Bridge[WS, WS, WS, WS](
+  endpointer = Bridge[WebSocket, WebSocket, WebSocket, WebSocket](
     WebSocketTransporter, new SerialClientDispatcher(_)),
-  pool = DefaultPool[WS, WS]()
+  pool = DefaultPool[WebSocket, WebSocket]()
 )
 
-object WebSocketListener extends Netty3Listener[WS, WS](
-  websocket.WebSocketCodec().server(ServerCodecConfig("websocketserver", new SocketAddress{})).pipelineFactory
+object WebSocketListener extends Netty3Listener[WebSocket, WebSocket](
+  WebSocketCodec().server(ServerCodecConfig("websocketserver", new SocketAddress{})).pipelineFactory
 )
 
-object WebSocketServer extends DefaultServer[WS, WS, WS, WS](
+object WebSocketServer extends DefaultServer[WebSocket, WebSocket, WebSocket, WebSocket](
   "websocketsrv", WebSocketListener, new SerialServerDispatcher(_, _)
 )
 
-object HttpWebSocket extends Client[WS, WS] with Server[WS, WS] {
-  def newClient(group: Group[SocketAddress]): ServiceFactory[WS, WS] =
+object HttpWebSocket
+  extends Client[WebSocket, WebSocket]
+  with Server[WebSocket, WebSocket]
+  with WebSocketRichClient
+{
+  def newClient(group: Group[SocketAddress]): ServiceFactory[WebSocket, WebSocket] =
     WebSocketClient.newClient(group)
 
-  def serve(addr: SocketAddress, service: ServiceFactory[WS, WS]): ListeningServer =
+  def serve(addr: SocketAddress, service: ServiceFactory[WebSocket, WebSocket]): ListeningServer =
     WebSocketServer.serve(addr, service)
 }
