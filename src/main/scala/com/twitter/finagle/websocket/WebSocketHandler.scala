@@ -105,7 +105,6 @@ class WebSocketServerHandler extends WebSocketHandler {
 
       case _: CloseWebSocketFrame =>
         ctx.sendDownstream(e)
-        //TODO proper cleanup
 
       case invalid =>
         Channels.fireExceptionCaught(ctx,
@@ -126,7 +125,6 @@ class WebSocketClientHandler extends WebSocketHandler {
 
       case frame: CloseWebSocketFrame =>
         ctx.getChannel.close()
-        //TODO cleanup
 
       case frame: PingWebSocketFrame =>
         ctx.getChannel.write(new PongWebSocketFrame(frame.getBinaryData))
@@ -167,7 +165,6 @@ class WebSocketClientHandler extends WebSocketHandler {
 
       case _: CloseWebSocketFrame =>
         ctx.sendDownstream(e)
-        //TODO cleanup
 
       case invalid =>
         Channels.fireExceptionCaught(ctx,
