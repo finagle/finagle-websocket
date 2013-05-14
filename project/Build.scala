@@ -10,7 +10,7 @@ object FinagleWebsockets extends Build {
 
   lazy val buildSettings = Seq(
     organization := "com.github.sprsquish",
-    version := "6.3.0",
+    version := "6.3.0-SNAPSHOT",
     crossScalaVersions := Seq("2.9.2", "2.10.0")
   )
 
