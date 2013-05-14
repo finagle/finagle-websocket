@@ -21,7 +21,7 @@ trait WebSocketRichClient {
 }
 
 object WebSocketTransporter extends Netty3Transporter[WebSocket, WebSocket](
-  WebSocketCodec().client(ClientCodecConfig("websocketclient")).pipelineFactory
+  "websocket", WebSocketCodec().client(ClientCodecConfig("websocketclient")).pipelineFactory
 )
 
 object WebSocketClient extends DefaultClient[WebSocket, WebSocket](
@@ -32,7 +32,7 @@ object WebSocketClient extends DefaultClient[WebSocket, WebSocket](
 )
 
 object WebSocketListener extends Netty3Listener[WebSocket, WebSocket](
-  WebSocketCodec().server(ServerCodecConfig("websocketserver", new SocketAddress{})).pipelineFactory
+  "websocket", WebSocketCodec().server(ServerCodecConfig("websocketserver", new SocketAddress{})).pipelineFactory
 )
 
 object WebSocketServer extends DefaultServer[WebSocket, WebSocket, WebSocket, WebSocket](
