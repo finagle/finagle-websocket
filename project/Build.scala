@@ -2,17 +2,18 @@ import sbt._
 import Keys._
 
 object FinagleWebsockets extends Build {
+  val finagleVersion = "6.5.0"
 
   val baseSettings = Defaults.defaultSettings ++ Seq(
     libraryDependencies ++= Seq(
-      "com.twitter" %% "finagle-core" % "6.4.1",
+      "com.twitter" %% "finagle-core" % finagleVersion,
       "org.scalatest" %% "scalatest" % "1.9.1" % "test",
       "junit" % "junit" % "4.8.1" % "test"
     ))
 
   lazy val buildSettings = Seq(
     organization := "com.github.sprsquish",
-    version := "6.4.1",
+    version := finagleVersion,
     crossScalaVersions := Seq("2.9.2", "2.10.0")
   )
 
