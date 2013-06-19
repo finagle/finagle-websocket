@@ -4,6 +4,8 @@
 
 Websockets support for Finagle
 
+[![Build Status](https://travis-ci.org/sprsquish/finagle-websocket.png)](https://travis-ci.org/sprsquish/finagle-websocket)
+
 ## Using websockets
 
 ### Adding dependencies
