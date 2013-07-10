@@ -2,16 +2,16 @@ import sbt._
 import Keys._
 
 object FinagleIrc extends Build {
-  val version = "6.5.1"
+  val libVersion = "6.5.1"
 
   val baseSettings = Defaults.defaultSettings ++ Seq(
     libraryDependencies ++= Seq(
-      "com.twitter" %% "finagle-core" % version
+      "com.twitter" %% "finagle-core" % libVersion
     ))
 
   lazy val buildSettings = Seq(
     organization := "com.github.sprsquish",
-    version := version,
+    version := libVersion,
     crossScalaVersions := Seq("2.9.2", "2.10.0")
   )
 

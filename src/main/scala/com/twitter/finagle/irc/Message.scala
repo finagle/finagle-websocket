@@ -1,0 +1,491 @@
+package com.twitter.finagle.irc
+
+import org.jboss.netty.buffer.ChannelBuffer
+
+trait Message {
+  def encode: String
+}
+
+case class Pass(pass: String) extends Message {
+  def encode = "PASS %s".format(pass)
+}
+
+case class Nick(name: String, hopCount: Option[Int] = None) extends Message {
+  def encode = {
+    val out = "NICK %s".format(name)
+    hopCount map { "%s %d".format(out, _) } getOrElse out
+  }
+}
+
+case class User(name: String, hostName: String, serverName: String, realName: String) extends Message {
+  def encode = "USER %s %s %s :%s".format(name, hostName, serverName, realName)
+}
+
+case class Server(name: String, hopCount: Int, info: String) extends Message {
+  def encode = "SERVER %s %d :%s".format(name, hopCount, info)
+}
+
+case class Oper(user: String, pass: String) extends Message {
+  def encode = "OPER %s %s".format(user, pass)
+}
+
+case class Quit(msg: Option[String] = None) extends Message {
+  def encode = msg map { "QUIT :%s".format(_) } getOrElse "QUIT"
+}
+
+case class ServerQuit(server: String, comment: String) extends Message {
+  def encode = "SQUIT %s :%s".format(server, comment)
+}
+
+case class Join(channels: Seq[String], keys: Seq[String] = Seq.empty[String]) extends Message {
+  def encode = "JOIN %s %s".format(channels.mkString(","), keys.mkString(","))
+}
+
+case class Part(channels: Seq[String]) extends Message {
+  def encode = "PART %s".format(channels.mkString(","))
+}
+
+sealed trait ChanMode extends Message {
+  val unset: Boolean
+  val chan: String
+  val modeId: String
+  def encode = "MODE %s %s%s %s".format(
+    chan, if (unset) "-" else "+", modeId, encodePostfix)
+  def encodePostfix: String = ""
+}
+
+case class ChanOpMode(unset: Boolean, chan: String, user: String) extends ChanMode {
+  val modeId = "o"
+  override def encodePostfix = user
+}
+
+case class ChanPrivateMode(unset: Boolean, chan: String) extends ChanMode {
+  val modeId = "p"
+}
+
+case class ChanSecretMode(unset: Boolean, chan: String) extends ChanMode {
+  val modeId = "s"
+}
+
+case class ChanInviteOnlyMode(unset: Boolean, chan: String) extends ChanMode {
+  val modeId = "i"
+}
+
+case class ChanTopicOpOnlyMode(unset: Boolean, chan: String) extends ChanMode {
+  val modeId = "t"
+}
+
+case class ChanNoOutsideMessagesMode(unset: Boolean, chan: String) extends ChanMode {
+  val modeId = "n"
+}
+
+case class ChanModeratedMode(unset: Boolean, chan: String) extends ChanMode {
+  val modeId = "m"
+}
+
+
+case class ChanUserLimitMode(unset: Boolean, chan: String, limit: Int) extends ChanMode {
+  val modeId = "l"
+  override def encodePostfix = limit.toString
+}
+
+case class ChanBanMaskMode(unset: Boolean, chan: String, mask: String) extends ChanMode {
+  val modeId = "b"
+  override def encodePostfix = mask
+}
+
+case class ChanVoiceMode(unset: Boolean, chan: String, user: String) extends ChanMode {
+  val modeId = "v"
+  override def encodePostfix = user
+}
+
+case class ChanKeyMode(unset: Boolean, chan: String, key: String) extends ChanMode {
+  val modeId = "k"
+  override def encodePostfix = key
+}
+
+sealed trait UserMode extends Message {
+  val unset: Boolean
+  val user: String
+  val modeId: String
+  def encode = "MODE %s %s%s".format(
+    user, if (unset) "-" else "+", modeId)
+}
+
+case class UserInvisibleMode(unset: Boolean, user: String) extends UserMode {
+  val modeId = "i"
+}
+
+case class UserReceiveServerNoticesMode(unset: Boolean, user: String) extends UserMode {
+  val modeId = "s"
+}
+
+case class UserReceiveWallopsMode(unset: Boolean, user: String) extends UserMode {
+  val modeId = "w"
+}
+
+case class UserOperatorMode(unset: Boolean, user: String) extends UserMode {
+  val modeId = "o"
+}
+
+private object UserMode {
+  private[this] def isChan(chan: String) =
+    chan.startsWith("#") || chan.startsWith("&")
+
+  def unapply(tkns: Seq[String]): Option[Message] = {
+    val unset = tkns match {
+      case _ :: m :: _ if m.startsWith("-") => true
+      case _ :: m :: _ if m.startsWith("+") => false
+      case _ => false
+    }
+
+    tkns match {
+      case chan :: ("+o" | "-o") :: user :: Nil if isChan(chan) => Some(ChanOpMode(unset, chan, user))
+      case chan :: ("+p" | "-p") :: Nil if isChan(chan) => Some(ChanPrivateMode(unset, chan))
+      case chan :: ("+s" | "-s") :: Nil if isChan(chan) => Some(ChanSecretMode(unset, chan))
+      case chan :: ("+i" | "-i") :: Nil if isChan(chan) => Some(ChanInviteOnlyMode(unset, chan))
+      case chan :: ("+t" | "-t") :: Nil if isChan(chan) => Some(ChanTopicOpOnlyMode(unset, chan))
+      case chan :: ("+n" | "-n") :: Nil if isChan(chan) => Some(ChanNoOutsideMessagesMode(unset, chan))
+      case chan :: ("+m" | "-m") :: Nil if isChan(chan) => Some(ChanModeratedMode(unset, chan))
+      case chan :: ("+l" | "-l") :: limit :: Nil if isChan(chan) => Some(ChanUserLimitMode(unset, chan, limit.toInt))
+      case chan :: ("+b" | "-b") :: mask :: Nil  if isChan(chan)=> Some(ChanBanMaskMode(unset, chan, mask))
+      case chan :: ("+v" | "-v") :: user :: Nil if isChan(chan) => Some(ChanVoiceMode(unset, chan, user))
+      case chan :: ("+k" | "-k") :: key :: Nil if isChan(chan) => Some(ChanKeyMode(unset, chan, key))
+
+      case user :: ("+i" | "-i") :: Nil => Some(UserInvisibleMode(unset, user))
+      case user :: ("+s" | "-s") :: Nil => Some(UserReceiveServerNoticesMode(unset, user))
+      case user :: ("+w" | "-w") :: Nil => Some(UserReceiveWallopsMode(unset, user))
+      case user :: ("+o" | "-o") :: Nil => Some(UserOperatorMode(unset, user))
+      case _ => None
+    }
+  }
+}
+
+case class Topic(channel: String, topic: Option[String] = None) extends Message {
+  def encode = {
+    var out = "TOPIC %s".format(channel)
+    topic foreach { t => out = "%s :%s".format(out, t) }
+    out
+  }
+}
+
+case class Names(channels: Seq[String] = Seq.empty[String]) extends Message {
+  def encode = "NAMES %s".format(channels.mkString(","))
+}
+
+case class ChanList(channels: Seq[String] = Seq.empty[String], server: Option[String] = None) extends Message {
+  def encode = {
+    var out = "LIST %s".format(channels.mkString(","))
+    server foreach { s => out = "%s %s".format(out, s) }
+    out
+  }
+}
+
+case class Invite(name: String, channel: String) extends Message {
+  def encode = "INVITE %s %s".format(name, channel)
+}
+
+case class Kick(channel: String, user: String, comment: Option[String] = None) extends Message {
+  def encode = {
+    var out = "KICK %s %s".format(channel, user)
+    comment foreach { c => out = "%s :%s".format(out, c) }
+    out
+  }
+}
+
+case class Version(server: Option[String] = None) extends Message {
+  def encode = {
+    var out = "VERSION"
+    server foreach { s => "%s %s".format(out, s) }
+    out
+  }
+}
+
+case class Stats(query: Option[String] = None, server: Option[String] = None) extends Message {
+  def encode = {
+    var out = "STATS"
+    query foreach { q => out = "%s %s".format(out, q) }
+    server foreach { s => out = "%s %s".format(out, s) }
+    out
+  }
+}
+
+case class Admin(server: Option[String] = None) extends Message {
+  def encode = {
+    var out = "ADMIN"
+    server foreach { s => out = "%s %s".format(out, s) }
+    out
+  }
+}
+
+case class Trace(server: Option[String] = None) extends Message {
+  def encode = {
+    var out = "TRACE"
+    server foreach { s => out = "%s %s".format(out, s) }
+    out
+  }
+}
+
+case class Connect(server: String, port: Option[Int] = None, remoteServer: Option[String] = None) extends Message {
+  def encode = {
+    var out = "CONNECT %s".format(server)
+    port foreach { p => out = "%s %d".format(out, p) }
+    remoteServer foreach { s => out = "%s %s".format(out, s) }
+    out
+  }
+}
+
+case class Time(server: Option[String] = None) extends Message {
+  def encode = {
+    var out = "TIME"
+    server foreach { t => out = "%s %s".format(out, t) }
+    out
+  }
+}
+
+case class Links(server: Option[String] = None, mask: Option[String] = None) extends Message {
+  def encode = {
+    var out = "LINKS"
+    server foreach { s => out = "%s %s".format(out, s) }
+    mask foreach { m => out = "%s %s".format(out, m) }
+    out
+  }
+}
+
+case class Info(server: Option[String] = None) extends Message {
+  def encode = {
+    var out = "INFO"
+    server foreach { s => out = "%s %s".format(out, s) }
+    out
+  }
+}
+
+case class PrivateMsg(receivers: Seq[String], text: String) extends Message {
+  def encode = "PRIVMSG %s :%s".format(receivers.mkString(","), text)
+}
+
+case class Notice(name: String, text: String) extends Message {
+  def encode = "NOTICE %s :%s".format(name, text)
+}
+
+case class Away(msg: Option[String] = None) extends Message {
+  def encode = {
+    var out = "AWAY"
+    msg foreach { m => out = "%s :%s".format(out, msg) }
+    out
+  }
+}
+
+case class Error(msg: String) extends Message {
+  def encode = "ERROR :%s".format(msg)
+}
+
+case class Pong(daemons: Seq[String]) extends Message {
+  def encode = "PONG %s".format(daemons.mkString(" "))
+}
+
+case class Ping(servers: Seq[String]) extends Message {
+  def encode = "PING %s".format(servers.mkString(" "))
+}
+
+case class Kill(name: String, comment: String) extends Message {
+  def encode = "KILL %s %s".format(name, comment)
+}
+
+case class WhoWas(name: String, count: Option[Int] = None, server: Option[String] = None) extends Message {
+  def encode = {
+    var out = "WHOWAS %s".format(name)
+    count foreach { c =>
+      out = "%s %d".format(out, c)
+      server foreach { s => out = "%s %s".format(out, s) }
+    }
+    out
+  }
+}
+
+case class WhoIs(server: Option[String] = None, nicks: Seq[String]) extends Message {
+  def encode = {
+    var out = "WHOIS"
+    server foreach { s => out = "%s %s".format(out, s) }
+    "%s %s".format(out, nicks.mkString(","))
+  }
+}
+
+case class Who(name: Option[String] = None, op: Boolean = false) extends Message {
+  def encode = {
+    var out = "WHO"
+    name foreach { n => out = "%s %s %s".format(out, n, if (op) "o" else "") }
+    out
+  }
+}
+
+
+object Protocol {
+  private[irc] def decode(tkns: List[String]): Option[Message] = {
+    val cmd :: tail = tkns
+    decoders.get(cmd.toUpperCase) flatMap { _.lift(tail) }
+  }
+
+  private[this] var decoders: Map[String, PartialFunction[List[String], Message]] =
+    Map(
+      ("PASS" -> {
+        case pass :: Nil => Pass(pass)
+      }),
+
+      ("NICK" -> {
+        case name :: hops :: Nil => Nick(name, Some(hops.toInt))
+        case name :: Nil => Nick(name)
+      }),
+
+      ("USER" -> {
+        case n :: hn :: sn :: rn =>
+          var name = rn.mkString(" ")
+          if (name.startsWith(":")) name = name.tail
+          User(n, hn, sn, name)
+      }),
+
+      ("SERVER" -> {
+        case n :: hc :: i :: Nil => Server(n, hc.toInt, i.tail)
+      }),
+
+      ("OPER" -> {
+        case u :: p :: Nil => Oper(u, p)
+      }),
+
+      ("QUIT" -> {
+        case msg :: Nil => Quit(Some(msg.tail))
+        case Nil => Quit()
+      }),
+
+      ("SQUIT" -> {
+        case s :: c :: Nil => ServerQuit(s, c.tail)
+      }),
+
+      ("JOIN" -> {
+        case chans :: keys :: Nil => Join(chans.split(','), keys.split(','))
+        case chans :: Nil => Join(chans.split(','))
+      }),
+
+      ("PART" -> {
+        case chans :: Nil => Part(chans.split(','))
+      }),
+
+      ("MODE" -> {
+        case UserMode(mode) => mode
+      }),
+
+      ("TOPIC" -> {
+        case chan :: Nil => Topic(chan)
+        case chan :: topic :: Nil => Topic(chan, Some(topic.tail))
+      }),
+
+      ("NAMES" -> {
+        case Nil => Names()
+        case names :: Nil => Names(names.split(","))
+      }),
+
+      ("LIST" -> {
+        case Nil => ChanList()
+        case chans :: Nil => ChanList(chans.split(","))
+        case chans :: server :: Nil => ChanList(chans.split(","), Some(server))
+      }),
+
+      ("INVITE" -> {
+        case name :: chan :: Nil => Invite(name, chan)
+      }),
+
+      ("KICK" -> {
+        case chan :: user :: Nil => Kick(chan, user)
+        case chan :: user :: c :: Nil => Kick(chan, user, Some(c.tail))
+      }),
+
+      ("VERSION" -> {
+        case Nil => Version()
+        case server :: Nil => Version(Some(server))
+      }),
+
+      ("STATS" -> {
+        case Nil => Stats()
+        case query :: Nil => Stats(Some(query))
+        case query :: server :: Nil => Stats(Some(query), Some(server))
+      }),
+
+      ("LINKS" -> {
+        case Nil => Links()
+        case mask :: Nil => Links(None, Some(mask))
+        case server :: mask :: Nil => Links(Some(server), Some(mask))
+      }),
+
+      ("TIME" -> {
+        case Nil => Time()
+        case server :: Nil => Time(Some(server))
+      }),
+
+      ("CONNECT" -> {
+        case server :: Nil => Connect(server)
+        case server :: port :: Nil => Connect(server, Some(port.toInt))
+        case server :: port :: rs :: Nil => Connect(server, Some(port.toInt), Some(rs))
+      }),
+
+      ("TRACE" -> {
+        case Nil => Trace()
+        case server :: Nil => Trace(Some(server))
+      }),
+
+      ("ADMIN" -> {
+        case Nil => Admin()
+        case server :: Nil => Admin(Some(server))
+      }),
+
+      ("INFO" -> {
+        case Nil => Info()
+        case server :: Nil => Info(Some(server))
+      }),
+
+      ("PRIVMSG" -> {
+        case recvs :: msg :: Nil => PrivateMsg(recvs.split(","), msg.tail)
+      }),
+
+      ("NOTICE" -> {
+        case name :: msg :: Nil => Notice(name, msg.tail)
+      }),
+
+      ("WHO" -> {
+        case Nil => Who()
+        case name :: Nil => Who(Some(name))
+        case name :: "o" :: Nil => Who(Some(name), true)
+      }),
+
+      ("WHOIS" -> {
+        case nicks :: Nil => WhoIs(None, nicks.split(","))
+        case server :: nicks :: Nil => WhoIs(Some(server), nicks.split(","))
+      }),
+
+      ("WHOWAS" -> {
+        case name :: Nil => WhoWas(name)
+        case name :: count :: Nil => WhoWas(name, Some(count.toInt))
+        case name :: count :: server :: Nil => WhoWas(name, Some(count.toInt), Some(server))
+      }),
+
+      ("KILL" -> {
+        case name :: comment :: Nil => Kill(name, comment)
+      }),
+
+      ("PING" -> {
+        case servers => Ping(servers)
+      }),
+
+      ("PONG" -> {
+        case daemons => Ping(daemons)
+      }),
+
+      ("ERROR" -> {
+        case msg :: Nil => Error(msg.tail)
+      }),
+
+      ("AWAY" -> {
+        case Nil => Away()
+        case msg :: Nil => Away(Some(msg))
+      })
+    )
+}
