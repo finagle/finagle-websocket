@@ -1,9 +1,17 @@
-package com.twitter.finagle.irc
+package com.twitter.finagle.irc.protocol
 
 import org.jboss.netty.buffer.ChannelBuffer
 
 trait Message {
   def encode: String
+}
+
+case class ServerMessage(nick: String, name: String, host: String, msg: Message) extends Message {
+  def encode = ":%s!%s@%s %s".format(nick, name, host, msg.encode)
+}
+
+case class UnknownCmd(cmd: String, args: String) extends Message {
+  def encode = throw new Exception("Non-Protocol Message")
 }
 
 case class Pass(pass: String) extends Message {
@@ -46,85 +54,85 @@ case class Part(channels: Seq[String]) extends Message {
 }
 
 sealed trait ChanMode extends Message {
-  val unset: Boolean
+  val unset: Option[Boolean]
   val chan: String
   val modeId: String
   def encode = "MODE %s %s%s %s".format(
-    chan, if (unset) "-" else "+", modeId, encodePostfix)
+    chan, unset map { u => if (u) "-" else "+" } getOrElse(""), modeId, encodePostfix)
   def encodePostfix: String = ""
 }
 
-case class ChanOpMode(unset: Boolean, chan: String, user: String) extends ChanMode {
+case class ChanOpMode(unset: Option[Boolean], chan: String, user: String) extends ChanMode {
   val modeId = "o"
   override def encodePostfix = user
 }
 
-case class ChanPrivateMode(unset: Boolean, chan: String) extends ChanMode {
+case class ChanPrivateMode(unset: Option[Boolean], chan: String) extends ChanMode {
   val modeId = "p"
 }
 
-case class ChanSecretMode(unset: Boolean, chan: String) extends ChanMode {
+case class ChanSecretMode(unset: Option[Boolean], chan: String) extends ChanMode {
   val modeId = "s"
 }
 
-case class ChanInviteOnlyMode(unset: Boolean, chan: String) extends ChanMode {
+case class ChanInviteOnlyMode(unset: Option[Boolean], chan: String) extends ChanMode {
   val modeId = "i"
 }
 
-case class ChanTopicOpOnlyMode(unset: Boolean, chan: String) extends ChanMode {
+case class ChanTopicOpOnlyMode(unset: Option[Boolean], chan: String) extends ChanMode {
   val modeId = "t"
 }
 
-case class ChanNoOutsideMessagesMode(unset: Boolean, chan: String) extends ChanMode {
+case class ChanNoOutsideMessagesMode(unset: Option[Boolean], chan: String) extends ChanMode {
   val modeId = "n"
 }
 
-case class ChanModeratedMode(unset: Boolean, chan: String) extends ChanMode {
+case class ChanModeratedMode(unset: Option[Boolean], chan: String) extends ChanMode {
   val modeId = "m"
 }
 
 
-case class ChanUserLimitMode(unset: Boolean, chan: String, limit: Int) extends ChanMode {
+case class ChanUserLimitMode(unset: Option[Boolean], chan: String, limit: Int) extends ChanMode {
   val modeId = "l"
   override def encodePostfix = limit.toString
 }
 
-case class ChanBanMaskMode(unset: Boolean, chan: String, mask: String) extends ChanMode {
+case class ChanBanMaskMode(unset: Option[Boolean], chan: String, mask: String) extends ChanMode {
   val modeId = "b"
   override def encodePostfix = mask
 }
 
-case class ChanVoiceMode(unset: Boolean, chan: String, user: String) extends ChanMode {
+case class ChanVoiceMode(unset: Option[Boolean], chan: String, user: String) extends ChanMode {
   val modeId = "v"
   override def encodePostfix = user
 }
 
-case class ChanKeyMode(unset: Boolean, chan: String, key: String) extends ChanMode {
+case class ChanKeyMode(unset: Option[Boolean], chan: String, key: String) extends ChanMode {
   val modeId = "k"
   override def encodePostfix = key
 }
 
 sealed trait UserMode extends Message {
-  val unset: Boolean
+  val unset: Option[Boolean]
   val user: String
   val modeId: String
   def encode = "MODE %s %s%s".format(
-    user, if (unset) "-" else "+", modeId)
+    user, unset map { u => if (u) "-" else "+" } getOrElse(""), modeId)
 }
 
-case class UserInvisibleMode(unset: Boolean, user: String) extends UserMode {
+case class UserInvisibleMode(unset: Option[Boolean], user: String) extends UserMode {
   val modeId = "i"
 }
 
-case class UserReceiveServerNoticesMode(unset: Boolean, user: String) extends UserMode {
+case class UserReceiveServerNoticesMode(unset: Option[Boolean], user: String) extends UserMode {
   val modeId = "s"
 }
 
-case class UserReceiveWallopsMode(unset: Boolean, user: String) extends UserMode {
+case class UserReceiveWallopsMode(unset: Option[Boolean], user: String) extends UserMode {
   val modeId = "w"
 }
 
-case class UserOperatorMode(unset: Boolean, user: String) extends UserMode {
+case class UserOperatorMode(unset: Option[Boolean], user: String) extends UserMode {
   val modeId = "o"
 }
 
@@ -134,28 +142,29 @@ private object UserMode {
 
   def unapply(tkns: Seq[String]): Option[Message] = {
     val unset = tkns match {
-      case _ :: m :: _ if m.startsWith("-") => true
-      case _ :: m :: _ if m.startsWith("+") => false
-      case _ => false
+      case _ :: m :: _ if m.startsWith("-") => Some(true)
+      case _ :: m :: _ if m.startsWith("+") => Some(false)
+      case _ => None
     }
 
     tkns match {
-      case chan :: ("+o" | "-o") :: user :: Nil if isChan(chan) => Some(ChanOpMode(unset, chan, user))
-      case chan :: ("+p" | "-p") :: Nil if isChan(chan) => Some(ChanPrivateMode(unset, chan))
-      case chan :: ("+s" | "-s") :: Nil if isChan(chan) => Some(ChanSecretMode(unset, chan))
-      case chan :: ("+i" | "-i") :: Nil if isChan(chan) => Some(ChanInviteOnlyMode(unset, chan))
-      case chan :: ("+t" | "-t") :: Nil if isChan(chan) => Some(ChanTopicOpOnlyMode(unset, chan))
-      case chan :: ("+n" | "-n") :: Nil if isChan(chan) => Some(ChanNoOutsideMessagesMode(unset, chan))
-      case chan :: ("+m" | "-m") :: Nil if isChan(chan) => Some(ChanModeratedMode(unset, chan))
-      case chan :: ("+l" | "-l") :: limit :: Nil if isChan(chan) => Some(ChanUserLimitMode(unset, chan, limit.toInt))
-      case chan :: ("+b" | "-b") :: mask :: Nil  if isChan(chan)=> Some(ChanBanMaskMode(unset, chan, mask))
-      case chan :: ("+v" | "-v") :: user :: Nil if isChan(chan) => Some(ChanVoiceMode(unset, chan, user))
-      case chan :: ("+k" | "-k") :: key :: Nil if isChan(chan) => Some(ChanKeyMode(unset, chan, key))
+      case chan :: ("o"|"+o"|"-o") :: user :: Nil if isChan(chan) => Some(ChanOpMode(unset, chan, user))
+      case chan :: ("p"|"+p"|"-p") :: Nil if isChan(chan) => Some(ChanPrivateMode(unset, chan))
+      case chan :: ("s"|"+s"|"-s") :: Nil if isChan(chan) => Some(ChanSecretMode(unset, chan))
+      case chan :: ("i"|"+i"|"-i") :: Nil if isChan(chan) => Some(ChanInviteOnlyMode(unset, chan))
+      case chan :: ("t"|"+t"|"-t") :: Nil if isChan(chan) => Some(ChanTopicOpOnlyMode(unset, chan))
+      case chan :: ("n"|"+n"|"-n") :: Nil if isChan(chan) => Some(ChanNoOutsideMessagesMode(unset, chan))
+      case chan :: ("m"|"+m"|"-m") :: Nil if isChan(chan) => Some(ChanModeratedMode(unset, chan))
+      case chan :: ("l"|"+l"|"-l") :: limit :: Nil if isChan(chan) => Some(ChanUserLimitMode(unset, chan, limit.toInt))
+      case chan :: ("+b"|"-b") :: mask :: Nil if isChan(chan)=> Some(ChanBanMaskMode(unset, chan, mask))
+      case chan :: "b" :: Nil if isChan(chan)=> Some(ChanBanMaskMode(unset, chan, ""))
+      case chan :: ("v"|"+v"|"-v") :: user :: Nil if isChan(chan) => Some(ChanVoiceMode(unset, chan, user))
+      case chan :: ("k"|"+k"|"-k") :: key :: Nil if isChan(chan) => Some(ChanKeyMode(unset, chan, key))
 
-      case user :: ("+i" | "-i") :: Nil => Some(UserInvisibleMode(unset, user))
-      case user :: ("+s" | "-s") :: Nil => Some(UserReceiveServerNoticesMode(unset, user))
-      case user :: ("+w" | "-w") :: Nil => Some(UserReceiveWallopsMode(unset, user))
-      case user :: ("+o" | "-o") :: Nil => Some(UserOperatorMode(unset, user))
+      case user :: ("i"|"+i"|"-i") :: Nil => Some(UserInvisibleMode(unset, user))
+      case user :: ("s"|"+s"|"-s") :: Nil => Some(UserReceiveServerNoticesMode(unset, user))
+      case user :: ("w"|"+w"|"-w") :: Nil => Some(UserReceiveWallopsMode(unset, user))
+      case user :: ("o"|"+o"|"-o") :: Nil => Some(UserOperatorMode(unset, user))
       case _ => None
     }
   }
@@ -235,7 +244,7 @@ case class Connect(server: String, port: Option[Int] = None, remoteServer: Optio
   }
 }
 
-case class Time(server: Option[String] = None) extends Message {
+case class ServerTime(server: Option[String] = None) extends Message {
   def encode = {
     var out = "TIME"
     server foreach { t => out = "%s %s".format(out, t) }
@@ -417,8 +426,8 @@ object Protocol {
       }),
 
       ("TIME" -> {
-        case Nil => Time()
-        case server :: Nil => Time(Some(server))
+        case Nil => ServerTime()
+        case server :: Nil => ServerTime(Some(server))
       }),
 
       ("CONNECT" -> {

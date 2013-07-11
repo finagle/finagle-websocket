@@ -6,8 +6,11 @@ object FinagleIrc extends Build {
 
   val baseSettings = Defaults.defaultSettings ++ Seq(
     libraryDependencies ++= Seq(
-      "com.twitter" %% "finagle-core" % libVersion
-    ))
+      "com.twitter" %% "finagle-core" % libVersion,
+      "com.twitter" %% "twitter-server" % "1.0.2"
+    ),
+    resolvers += "twitter-repo" at "http://maven.twttr.com"
+  )
 
   lazy val buildSettings = Seq(
     organization := "com.github.sprsquish",

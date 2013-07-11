@@ -1,6 +1,7 @@
 package com.twitter.finagle
 
 import com.twitter.finagle.irc._
+import com.twitter.finagle.irc.protocol.Message
 import com.twitter.finagle.client._
 import com.twitter.finagle.dispatch.{SerialServerDispatcher, SerialClientDispatcher}
 import com.twitter.finagle.netty3._
@@ -37,22 +38,4 @@ object Irc
 
   def serve(addr: SocketAddress, service: ServiceFactory[IrcHandle, Offer[Message]]): ListeningServer =
     IrcServer.serve(addr, service)
-}
-
-object Main extends App {
-  val server = Irc.serve(":6060", new com.twitter.finagle.Service[IrcHandle, Offer[Message]] {
-    def apply(handle: IrcHandle): Future[Offer[Message]] = {
-      val outgoing = new Broker[Message]
-      handle.messages foreach { msg =>
-        println(msg)
-        msg match {
-          case ChanList(_, _) =>
-          case _ => outgoing ! ErrUknownCommand("this", "you", msg.encode)
-        }
-      }
-      Future.value(outgoing.recv)
-    }
-  })
-
-  com.twitter.util.Await.ready(server)
 }

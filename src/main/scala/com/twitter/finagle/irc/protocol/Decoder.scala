@@ -1,6 +1,5 @@
 package com.twitter.finagle.irc.protocol
 
-import com.twitter.finagle.irc.{Message, Protocol, Response}
 import org.jboss.netty.handler.codec.frame.FrameDecoder
 import org.jboss.netty.util.CharsetUtil
 import org.jboss.netty.channel._
@@ -29,14 +28,14 @@ class Decoder extends FrameDecoder {
       val frame = buf.slice(buf.readerIndex, frameLength)
       buf.skipBytes(frameLength + DelimiterLength)
 
-      val cmd :: tail = frame.toString(CharsetUtil.UTF_8).split(":", 1).toList: List[String]
+      val cmdStr = frame.toString(CharsetUtil.UTF_8)
+      println("< " + cmdStr)
+      val cmd :: tail = cmdStr.split(":", 1).toList: List[String]
       cmd match {
-        case DecimalRegex => Response.get(cmd.toInt)
+        //case DecimalRegex => Response.get(cmd.toInt)
         case _ =>
-          val tkns: List[String] = cmd.split(" ").toList
-          Protocol.decode(tkns ++ tail) getOrElse {
-            throw new Exception("Bad Message")
-          }
+          val tkns: List[String] = cmd.split(" ").toList ++ tail
+          Protocol.decode(tkns) getOrElse { UnknownCmd(tkns.first, tkns.tail.mkString(" ")) }
       }
     }
   }

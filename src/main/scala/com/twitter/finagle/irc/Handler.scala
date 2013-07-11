@@ -1,5 +1,6 @@
 package com.twitter.finagle.irc
 
+import com.twitter.finagle.irc.protocol.Message
 import com.twitter.concurrent.{Offer, Broker}
 import com.twitter.util.{Future, Promise, Return}
 import org.jboss.netty.channel._
@@ -30,7 +31,7 @@ private[irc] abstract class Handler extends SimpleChannelHandler {
 
   override def writeRequested(ctx: ChannelHandlerContext, e: MessageEvent) = {
     e.getMessage match {
-      case outbound: Offer[_] =>
+      case outbound: Offer[Message] =>
         e.getFuture.setSuccess()
         outbound foreach { message =>
           Channels.write(ctx, Channels.future(ctx.getChannel), message)
