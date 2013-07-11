@@ -43,7 +43,7 @@ case class Oper(user: String, pass: String) extends Message {
 }
 
 case class Quit(msg: Option[String] = None) extends Message {
-  def encode = msg map { "QUIT :%s".format(_) } getOrElse "QUIT"
+  def encode = "QUIT :%s".format(msg.getOrElse("Leaving"))
 }
 
 case class ServerQuit(server: String, comment: String) extends Message {
@@ -62,90 +62,38 @@ case class Part(channels: Seq[String], name: Option[String] = None) extends Mess
   }
 }
 
-sealed trait ChanMode extends Message {
-  val unset: Option[Boolean]
-  val chan: String
-  val modeId: String
-  def encode = "MODE %s %s%s %s".format(
-    chan, unset map { u => if (u) "-" else "+" } getOrElse(""), modeId, encodePostfix)
-  def encodePostfix: String = ""
-}
-
-case class ChanOpMode(unset: Option[Boolean], chan: String, user: String) extends ChanMode {
-  val modeId = "o"
-  override def encodePostfix = user
-}
-
-case class ChanPrivateMode(unset: Option[Boolean], chan: String) extends ChanMode {
-  val modeId = "p"
-}
-
-case class ChanSecretMode(unset: Option[Boolean], chan: String) extends ChanMode {
-  val modeId = "s"
-}
-
-case class ChanInviteOnlyMode(unset: Option[Boolean], chan: String) extends ChanMode {
-  val modeId = "i"
-}
-
-case class ChanTopicOpOnlyMode(unset: Option[Boolean], chan: String) extends ChanMode {
-  val modeId = "t"
-}
-
-case class ChanNoOutsideMessagesMode(unset: Option[Boolean], chan: String) extends ChanMode {
-  val modeId = "n"
-}
-
-case class ChanModeratedMode(unset: Option[Boolean], chan: String) extends ChanMode {
-  val modeId = "m"
-}
-
-
-case class ChanUserLimitMode(unset: Option[Boolean], chan: String, limit: Int) extends ChanMode {
-  val modeId = "l"
-  override def encodePostfix = limit.toString
-}
-
-case class ChanBanMaskMode(unset: Option[Boolean], chan: String, mask: String) extends ChanMode {
-  val modeId = "b"
-  override def encodePostfix = mask
-}
-
-case class ChanVoiceMode(unset: Option[Boolean], chan: String, user: String) extends ChanMode {
-  val modeId = "v"
-  override def encodePostfix = user
-}
-
-case class ChanKeyMode(unset: Option[Boolean], chan: String, key: String) extends ChanMode {
-  val modeId = "k"
-  override def encodePostfix = key
-}
-
-sealed trait UserMode extends Message {
+sealed abstract class Mode(modeId: String) extends Message {
   val unset: Option[Boolean]
   val user: String
-  val modeId: String
   def encode = "MODE %s %s%s".format(
     user, unset map { u => if (u) "-" else "+" } getOrElse(""), modeId)
 }
 
-case class UserInvisibleMode(unset: Option[Boolean], user: String) extends UserMode {
-  val modeId = "i"
+sealed abstract class ChanMode(modeId: String, prefix: String = "") extends Mode(modeId) {
+  val unset: Option[Boolean]
+  val chan: String
+  val user = chan
+  override def encode = "%s %s".format(super.encode, prefix)
 }
 
-case class UserReceiveServerNoticesMode(unset: Option[Boolean], user: String) extends UserMode {
-  val modeId = "s"
-}
+case class UserInvisibleMode(unset: Option[Boolean], user: String) extends Mode("i")
+case class UserReceiveServerNoticesMode(unset: Option[Boolean], user: String) extends Mode("s")
+case class UserReceiveWallopsMode(unset: Option[Boolean], user: String) extends Mode("w")
+case class UserOperatorMode(unset: Option[Boolean], user: String) extends Mode("o")
 
-case class UserReceiveWallopsMode(unset: Option[Boolean], user: String) extends UserMode {
-  val modeId = "w"
-}
+case class ChanOpMode(unset: Option[Boolean], chan: String, nick: String) extends ChanMode("o", nick)
+case class ChanPrivateMode(unset: Option[Boolean], chan: String) extends ChanMode("p")
+case class ChanSecretMode(unset: Option[Boolean], chan: String) extends ChanMode("s")
+case class ChanInviteOnlyMode(unset: Option[Boolean], chan: String) extends ChanMode("i")
+case class ChanTopicOpOnlyMode(unset: Option[Boolean], chan: String) extends ChanMode("t")
+case class ChanNoOutsideMessagesMode(unset: Option[Boolean], chan: String) extends ChanMode("n")
+case class ChanModeratedMode(unset: Option[Boolean], chan: String) extends ChanMode("m")
+case class ChanUserLimitMode(unset: Option[Boolean], chan: String, limit: Int) extends ChanMode("l", limit.toString)
+case class ChanBanMaskMode(unset: Option[Boolean], chan: String, mask: String) extends ChanMode("b", mask)
+case class ChanVoiceMode(unset: Option[Boolean], chan: String, nick: String) extends ChanMode("v", nick)
+case class ChanKeyMode(unset: Option[Boolean], chan: String, key: String) extends ChanMode("k", key)
 
-case class UserOperatorMode(unset: Option[Boolean], user: String) extends UserMode {
-  val modeId = "o"
-}
-
-private object UserMode {
+private object Mode {
   private[this] def isChan(chan: String) =
     chan.startsWith("#") || chan.startsWith("&")
 
@@ -389,7 +337,7 @@ object Protocol {
       }),
 
       ("MODE" -> {
-        case UserMode(mode) => mode
+        case Mode(mode) => mode
       }),
 
       ("TOPIC" -> {
