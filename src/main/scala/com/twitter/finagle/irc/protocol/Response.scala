@@ -84,7 +84,7 @@ case class RplChannelModeIs(chan: String, mode: Set[String]) extends Response(32
 }
 
 case class RplNameReply(chan: String, names: Set[String]) extends Response(353) {
-  def encode = "%s :%s".format(chan, names.mkString(" "))
+  def encode = "= %s :%s".format(chan, names.mkString(" "))
 }
 
 case class RplEndOfNames(chan: String) extends Response(366) {

@@ -22,6 +22,8 @@ class Decoder extends FrameDecoder {
     }
   }
 
+  val ServerUser = """([^!]+)!?([^@]*)?@?(.+)?""".r
+
   def decode(ctx: ChannelHandlerContext, channel: Channel, buf: ChannelBuffer): Message = {
     val frameLength = buf.bytesBefore(FindCRLF)
     if (frameLength < 0) NeedMoreData else {
@@ -30,12 +32,17 @@ class Decoder extends FrameDecoder {
 
       val cmdStr = frame.toString(CharsetUtil.UTF_8)
       println("< " + cmdStr)
-      val cmd :: tail = cmdStr.split(":", 1).toList: List[String]
-      cmd match {
-        //case DecimalRegex => Response.get(cmd.toInt)
-        case _ =>
-          val tkns: List[String] = cmd.split(" ").toList ++ tail
-          Protocol.decode(tkns) getOrElse { UnknownCmd(tkns.first, tkns.tail.mkString(" ")) }
+
+      def decode(cmdStr: String) = {
+        val cmd :: tail = cmdStr.split(":", 2).toList: List[String]
+        val tkns: List[String] = cmd.split(" ").toList ++ tail
+        Protocol.decode(tkns) getOrElse { UnknownCmd(tkns.first, tkns.tail.mkString(" ")) }
+      }
+
+      if (!cmdStr.startsWith(":")) decode(cmdStr) else {
+        val head :: cmd :: Nil = cmdStr.split(" ", 1).toList
+        val ServerUser(nick, name, host) = head
+        ServerMessage(nick, Option(name), Option(host), decode(cmd))
       }
     }
   }

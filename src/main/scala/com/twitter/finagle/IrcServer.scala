@@ -15,23 +15,47 @@ case class RemoteServer(
   name: String)
 
 case class SessionUser(
+  session: Session,
   nick: String,
   name: String,
   realName: String,
   modes: Set[String] = Set.empty[String],
-  key: Option[String] = None
+  key: Option[String] = None,
+  op: Boolean = false,
+  away: Boolean = false
 ) {
   def visible = !invisible
   def invisible = modes contains "i"
+
+  def modeString = {
+    var out = if (away) "H" else "G"
+    if (op) out += "*"
+    out
+  }
 }
 
 case class Channel(
   name: String,
   topic: Option[String] = None,
   modes: Set[String] = Set.empty[String],
-  users: mutable.Set[SessionUser] = mutable.Set.empty[SessionUser]
+  users: mutable.Set[ChannelUser] = mutable.Set.empty[ChannelUser]
 ) {
-  def visible = users filter { _.visible }
+  def visible = users filter { _.user.visible }
+}
+
+case class ChannelUser(
+  user: SessionUser,
+  op: Boolean = false,
+  voice: Boolean = false
+) {
+  def chanModeString = {
+    var out = ""
+    if (op) out += "@"
+    if (voice) out += "+"
+    out
+  }
+
+  def modeString = user.modeString + chanModeString
 }
 
 class Session(server: Server, handle: IrcHandle) {
@@ -47,7 +71,7 @@ class Session(server: Server, handle: IrcHandle) {
 
     case User(name, _, _, realName) =>
       if (user == null) {
-        user = SessionUser(nick, name, realName, Set.empty[String])
+        user = SessionUser(this, nick, name, realName, Set.empty[String])
         server.welcome(this)
       } else {
         user = user.copy(nick = nick, name = name, realName = realName)
@@ -95,57 +119,80 @@ class Server(
     Future.value(session.recv)
   }
 
-  def welcome(session: Session): Future[Unit] = for {
-    _ <- session.out ! RplWelcome(session.user.nick, session.user.name, name)
-    _ <- session.out ! RplYourHost(name, version)
-    _ <- session.out ! RplCreated(start.toString)
-    _ <- session.out ! RplMyInfo(name, version, Seq("iOM"), Seq("ntmikbohv"))
-    _ <- session.out ! RplMotdStart(name)
-    _ <- Future.collect(motd map { msg => session.out ! RplMotd(msg) })
-    _ <- session.out ! RplEndOfMotd()
+  def welcome(session: Session) {
+    session.out ! RplWelcome(session.user.nick, session.user.name, name)
+    session.out ! RplYourHost(name, version)
+    session.out ! RplCreated(start.toString)
+    session.out ! RplMyInfo(name, version, Seq("iOM"), Seq("ntmikbohv"))
+    session.out ! RplMotdStart(name)
+    motd foreach { msg => session.out ! RplMotd(msg) }
+    session.out ! RplEndOfMotd()
 
-    _ <- session.out ! RplLUserClient(sessions.size, invisibles.size, servers.size)
-    _ <- session.out ! RplLUserOp(operators.size)
-    _ <- session.out ! RplLUserUnknown(unknowns.size)
-    _ <- session.out ! RplLUserChannels(channels.size)
-    _ <- session.out ! RplLUserMe(sessions.size, servers.size)
-  } yield ()
+    session.out ! RplLUserClient(sessions.size, invisibles.size, servers.size)
+    session.out ! RplLUserOp(operators.size)
+    session.out ! RplLUserUnknown(unknowns.size)
+    session.out ! RplLUserChannels(channels.size)
+    session.out ! RplLUserMe(sessions.size, servers.size)
+  }
 
   def handle(msg: Message, session: Session) = msg match {
     case ChanList(Seq("STOP"), _) =>
     case ChanList(chans, _) =>
-      for {
-        _ <- session.out ! RplListStart()
-        _ <- Future.collect(channels map { case (_, c) => session.out ! RplList(c.name, c.visible.size, c.topic.getOrElse("")) } toSeq)
-        _ <- session.out ! RplListEnd()
-      } {}
+        session.out ! RplListStart()
+        channels foreach { case (_, c) => session.out ! RplList(c.name, c.visible.size, c.topic.getOrElse("")) }
+        session.out ! RplListEnd()
 
     case Join(chans, keys) =>
       chans foreach { name =>
-        val chan = channels getOrElseUpdate(name, Channel(name))
         val user = session.user
-        chan.users += user
-        session.out ! ServerMessage(user.nick, user.name, hostname, Join(Seq(chan.name)))
+        var chanUser = ChannelUser(user)
+        val chan = channels getOrElseUpdate(name, {
+          chanUser = chanUser.copy(op = true)
+          Channel(name)
+        })
+        chan.users += chanUser
+        chan.users foreach {
+          _.user.session.out ! ServerMessage(user.nick, Some(user.name), Some(hostname), Join(Seq(chan.name)))
+        }
         session.out ! RplChannelModeIs(chan.name, chan.modes)
         session.out ! (chan.topic match {
           case Some(t) => RplTopic(chan.name, t)
           case None => RplNoTopic(chan.name)
         })
-        session.out ! RplNameReply(chan.name, chan.users.map(_.nick).toSet)
+        session.out ! RplNameReply(chan.name, chan.users.map { u => u.chanModeString + u.user.nick } toSet)
         session.out ! RplEndOfNames(chan.name)
+      }
+
+    case Part(chans, _) =>
+      for { n <- chans; chan <- channels.get(n) } {
+        chan.users find(_.user == session.user) foreach { chanUser =>
+          val user = chanUser.user
+          chan.users foreach { _.user.session.out ! ServerMessage(user.nick, Some(user.name), Some(hostname), Part(Seq(chan.name), Some(user.nick))) }
+          chan.users -= chanUser
+        }
       }
 
     case Who(Some(chan), _) =>
       channels.get(chan) foreach { chan =>
-        chan.users foreach { user =>
-          // TODO: host, <H|G>[*][@|+], hopcount
-          session.out ! RplWhoReply(chan.name, user.name, "", name, user.nick, "G", 0, user.realName)
+        chan.users foreach { u =>
+          val user = u.user
+          // TODO: hopcount
+          session.out ! RplWhoReply(chan.name, user.name, hostname, name, user.nick, u.modeString, 0, user.realName)
         }
         session.out ! RplEndOfWho(chan.name)
       }
 
     case ChanBanMaskMode(None, chan, _) =>
       session.out ! RplEndOfBanList(chan)
+
+    case PrivMsg(chans, text) =>
+      val user = session.user
+      for { c <- chans; chan <- channels.get(c); u <- chan.users if u.user != user } {
+        u.user.session.out ! ServerMessage(user.nick, Some(user.name), Some(hostname), PrivMsg(Seq(chan.name), text))
+      }
+
+    case Ping(s) =>
+      session.out ! ServerMessage(name, None, None, Pong(s))
 
     case msg =>
       session.out ! ErrUknownCommand(msg.encode)

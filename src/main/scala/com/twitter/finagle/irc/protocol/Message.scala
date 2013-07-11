@@ -6,8 +6,13 @@ trait Message {
   def encode: String
 }
 
-case class ServerMessage(nick: String, name: String, host: String, msg: Message) extends Message {
-  def encode = ":%s!%s@%s %s".format(nick, name, host, msg.encode)
+case class ServerMessage(nick: String, name: Option[String], host: Option[String], msg: Message) extends Message {
+  def encode = {
+    var out = ":%s".format(nick)
+    name foreach { n => out = "%s!%s".format(out, n) }
+    host foreach { h => out = "%s@%s".format(out, h) }
+    "%s %s".format(out, msg.encode)
+  }
 }
 
 case class UnknownCmd(cmd: String, args: String) extends Message {
@@ -49,8 +54,12 @@ case class Join(channels: Seq[String], keys: Seq[String] = Seq.empty[String]) ex
   def encode = "JOIN %s %s".format(channels.mkString(","), keys.mkString(","))
 }
 
-case class Part(channels: Seq[String]) extends Message {
-  def encode = "PART %s".format(channels.mkString(","))
+case class Part(channels: Seq[String], name: Option[String] = None) extends Message {
+  def encode = {
+    var out = "PART %s".format(channels.mkString(","))
+    name foreach { n => out += " :%s".format(n) }
+    out
+  }
 }
 
 sealed trait ChanMode extends Message {
@@ -269,7 +278,7 @@ case class Info(server: Option[String] = None) extends Message {
   }
 }
 
-case class PrivateMsg(receivers: Seq[String], text: String) extends Message {
+case class PrivMsg(receivers: Seq[String], text: String) extends Message {
   def encode = "PRIVMSG %s :%s".format(receivers.mkString(","), text)
 }
 
@@ -354,7 +363,7 @@ object Protocol {
       }),
 
       ("SERVER" -> {
-        case n :: hc :: i :: Nil => Server(n, hc.toInt, i.tail)
+        case n :: hc :: i :: Nil => Server(n, hc.toInt, i)
       }),
 
       ("OPER" -> {
@@ -362,12 +371,12 @@ object Protocol {
       }),
 
       ("QUIT" -> {
-        case msg :: Nil => Quit(Some(msg.tail))
+        case msg :: Nil => Quit(Some(msg))
         case Nil => Quit()
       }),
 
       ("SQUIT" -> {
-        case s :: c :: Nil => ServerQuit(s, c.tail)
+        case s :: c :: Nil => ServerQuit(s, c)
       }),
 
       ("JOIN" -> {
@@ -385,7 +394,7 @@ object Protocol {
 
       ("TOPIC" -> {
         case chan :: Nil => Topic(chan)
-        case chan :: topic :: Nil => Topic(chan, Some(topic.tail))
+        case chan :: topic :: Nil => Topic(chan, Some(topic))
       }),
 
       ("NAMES" -> {
@@ -405,7 +414,7 @@ object Protocol {
 
       ("KICK" -> {
         case chan :: user :: Nil => Kick(chan, user)
-        case chan :: user :: c :: Nil => Kick(chan, user, Some(c.tail))
+        case chan :: user :: c :: Nil => Kick(chan, user, Some(c))
       }),
 
       ("VERSION" -> {
@@ -452,11 +461,11 @@ object Protocol {
       }),
 
       ("PRIVMSG" -> {
-        case recvs :: msg :: Nil => PrivateMsg(recvs.split(","), msg.tail)
+        case recvs :: msg :: Nil => PrivMsg(recvs.split(","), msg)
       }),
 
       ("NOTICE" -> {
-        case name :: msg :: Nil => Notice(name, msg.tail)
+        case name :: msg :: Nil => Notice(name, msg)
       }),
 
       ("WHO" -> {
@@ -485,11 +494,11 @@ object Protocol {
       }),
 
       ("PONG" -> {
-        case daemons => Ping(daemons)
+        case daemons => Pong(daemons)
       }),
 
       ("ERROR" -> {
-        case msg :: Nil => Error(msg.tail)
+        case msg :: Nil => Error(msg)
       }),
 
       ("AWAY" -> {
