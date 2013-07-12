@@ -19,7 +19,7 @@ class Server(
   motd: Seq[String],
   stats: StatsReceiver
 ) extends Service[IrcHandle, Offer[Message]] {
-  val start = Time.now
+  val start = Time.now.toString
 
   var sessions = Set.empty[Session]
   var operators = Set.empty[Session]
@@ -37,14 +37,14 @@ class Server(
     handle.messages foreach { process(_, session) }
     Future.value(session.recv map {
       case r: Response => ResponseWrapper(name, session.nick, r)
-      case r => r
+      case msg => msg
     })
   }
 
   def welcome(session: Session): Future[Unit] = for {
-    _ <- session ! RplWelcome(session.user.nick, session.user.name, name)
+    _ <- session ! RplWelcome(session.nick, session.name, name)
     _ <- session ! RplYourHost(name, version)
-    _ <- session ! RplCreated(start.toString)
+    _ <- session ! RplCreated(start)
     _ <- session ! RplMyInfo(name, version, Seq("iOM"), Seq("ntmikbohv"))
     _ <- session ! RplMotdStart(name)
     _ <- Future.collect(motd map { msg => session ! RplMotd(msg) })
@@ -110,7 +110,7 @@ class Server(
       withChans(Seq(chan)) { _.setTopic(session, topic) }
 
     case Ping(s) =>
-      session ! session.serverMsg(Pong(s))
+      session ! session.from(Pong(s))
 
     case Quit(msg) =>
       synchronized { sessions -= session }

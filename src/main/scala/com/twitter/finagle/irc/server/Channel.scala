@@ -6,7 +6,7 @@ import com.twitter.concurrent.Broker
 import com.twitter.util.Future
 import scala.collection.mutable
 
-case class ChannelUser(user: SessionUser) {
+case class ChannelUser(session: Session) {
   var op: Boolean = false
   var voice: Boolean = false
 
@@ -18,20 +18,19 @@ case class ChannelUser(user: SessionUser) {
   }
 
   def modeString =
-    user.modeString + chanModeString
+    session.modeString + chanModeString
 
-  def ! = user ! _
+  def ! = session ! _
 
-  def part = user.part(_)
-  def join = user.join(_)
+  def part = session.part(_)
+  def join = session.join(_)
 
-  def session = user.session
-  def nick = user.nick
-  def name = user.name
-  def realName = user.realName
-  def hostName = user.hostName
+  def nick = session.nick
+  def name = session.name
+  def realName = session.realName
+  def hostName = session.hostName
 
-  def isVisible = !user.invisible
+  def isVisible = !session.invisible
 
   def display =
     chanModeString + nick
@@ -45,7 +44,7 @@ case class Channel(name: String) {
   def topic = _topic
 
   def findUser(session: Session): Option[ChannelUser] =
-    _users find { _.user == session.user }
+    _users find { _.session == session }
 
   def users: Set[Session] =
     _users map { _.session } toSet
@@ -62,7 +61,7 @@ case class Channel(name: String) {
   def setTopic(session: Session, topic: Option[String]): Future[Unit] = {
     // TODO: check permissions
     _topic = topic
-    this ! session.serverMsg(Topic(name, _topic))
+    this ! session.from(Topic(name, _topic))
   }
 
   def who(session: Session): Future[Unit] = Future.collect(
@@ -74,11 +73,10 @@ case class Channel(name: String) {
 
   def msg(session: Session, text: String): Future[Unit] = {
     //TODO: check for permission
-    val user = session.user
     Future.collect(
       _users map { u =>
-        if (u.user == session.user) Future.Done
-        else u ! session.serverMsg(PrivMsg(Seq(name), text))
+        if (u.session == session) Future.Done
+        else u ! session.from(PrivMsg(Seq(name), text))
       } toSeq
     ) flatMap { _ => Future.Done }
   }
@@ -88,17 +86,17 @@ case class Channel(name: String) {
     join(session)
 
   def join(session: Session): Future[Unit] = {
-    if (_users find { _.user == session.user } isDefined)
+    if (_users find { _.session == session } isDefined)
       return Future.Done
 
     // TODO: permissions check
     // TODO: op on new room?
-    val user = new ChannelUser(session.user)
+    val user = new ChannelUser(session)
     _users += user
     user.join(this)
 
     for {
-      _ <- this ! session.serverMsg(Join(Seq(name)))
+      _ <- this ! session.from(Join(Seq(name)))
 
       _ <- user ! RplChannelModeIs(name, modes)
       _ <- user ! (_topic match {
@@ -112,7 +110,7 @@ case class Channel(name: String) {
 
   def part(session: Session): Future[Unit] = findUser(session) match {
     case Some(user) =>
-      this ! session.serverMsg(Part(Seq(name), Some(user.nick))) onSuccess { _ =>
+      this ! session.from(Part(Seq(name), Some(user.nick))) onSuccess { _ =>
         _users -= user
         user.part(this)
       }
@@ -124,10 +122,9 @@ case class Channel(name: String) {
   def quit(session: Session, msg: Option[String]): Future[Unit] = findUser(session) match {
     case Some(user) =>
       _users -= user
-      this ! session.serverMsg(Quit(msg))
+      this ! session.from(Quit(msg))
 
     case None =>
       Future.Done
   }
 }
-
