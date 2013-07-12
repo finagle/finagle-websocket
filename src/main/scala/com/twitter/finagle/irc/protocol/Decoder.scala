@@ -31,6 +31,7 @@ class Decoder extends FrameDecoder {
       buf.skipBytes(frameLength + DelimiterLength)
 
       val cmdStr = frame.toString(CharsetUtil.UTF_8)
+      // TODO: println
       println("< " + cmdStr)
 
       def decode(cmdStr: String) = {

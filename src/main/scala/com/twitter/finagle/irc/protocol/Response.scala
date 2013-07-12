@@ -38,8 +38,8 @@ case class RplListStart() extends Response(321) {
   def encode = ""
 }
 
-case class RplList(chan: String, visible: Int, topic: String) extends Response(322) {
-  def encode = "%s %d :%s".format(chan, visible, topic)
+case class RplList(chan: String, visible: Int, topic: Option[String]) extends Response(322) {
+  def encode = "%s %d :%s".format(chan, visible, topic.getOrElse(""))
 }
 
 case class RplListEnd() extends Response(323) {

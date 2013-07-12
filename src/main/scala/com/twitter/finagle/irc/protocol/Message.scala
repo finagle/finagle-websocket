@@ -104,25 +104,24 @@ private object Mode {
       case _ => None
     }
 
-    tkns match {
-      case chan :: ("o"|"+o"|"-o") :: user :: Nil if isChan(chan) => Some(ChanOpMode(unset, chan, user))
-      case chan :: ("p"|"+p"|"-p") :: Nil if isChan(chan) => Some(ChanPrivateMode(unset, chan))
-      case chan :: ("s"|"+s"|"-s") :: Nil if isChan(chan) => Some(ChanSecretMode(unset, chan))
-      case chan :: ("i"|"+i"|"-i") :: Nil if isChan(chan) => Some(ChanInviteOnlyMode(unset, chan))
-      case chan :: ("t"|"+t"|"-t") :: Nil if isChan(chan) => Some(ChanTopicOpOnlyMode(unset, chan))
-      case chan :: ("n"|"+n"|"-n") :: Nil if isChan(chan) => Some(ChanNoOutsideMessagesMode(unset, chan))
-      case chan :: ("m"|"+m"|"-m") :: Nil if isChan(chan) => Some(ChanModeratedMode(unset, chan))
-      case chan :: ("l"|"+l"|"-l") :: limit :: Nil if isChan(chan) => Some(ChanUserLimitMode(unset, chan, limit.toInt))
-      case chan :: ("+b"|"-b") :: mask :: Nil if isChan(chan)=> Some(ChanBanMaskMode(unset, chan, mask))
-      case chan :: "b" :: Nil if isChan(chan)=> Some(ChanBanMaskMode(unset, chan, ""))
-      case chan :: ("v"|"+v"|"-v") :: user :: Nil if isChan(chan) => Some(ChanVoiceMode(unset, chan, user))
-      case chan :: ("k"|"+k"|"-k") :: key :: Nil if isChan(chan) => Some(ChanKeyMode(unset, chan, key))
+    PartialFunction.condOpt(tkns) {
+      case chan :: ("o"|"+o"|"-o") :: user :: Nil if isChan(chan) => ChanOpMode(unset, chan, user)
+      case chan :: ("p"|"+p"|"-p") :: Nil if isChan(chan) => ChanPrivateMode(unset, chan)
+      case chan :: ("s"|"+s"|"-s") :: Nil if isChan(chan) => ChanSecretMode(unset, chan)
+      case chan :: ("i"|"+i"|"-i") :: Nil if isChan(chan) => ChanInviteOnlyMode(unset, chan)
+      case chan :: ("t"|"+t"|"-t") :: Nil if isChan(chan) => ChanTopicOpOnlyMode(unset, chan)
+      case chan :: ("n"|"+n"|"-n") :: Nil if isChan(chan) => ChanNoOutsideMessagesMode(unset, chan)
+      case chan :: ("m"|"+m"|"-m") :: Nil if isChan(chan) => ChanModeratedMode(unset, chan)
+      case chan :: ("l"|"+l"|"-l") :: limit :: Nil if isChan(chan) => ChanUserLimitMode(unset, chan, limit.toInt)
+      case chan :: ("+b"|"-b") :: mask :: Nil if isChan(chan)=> ChanBanMaskMode(unset, chan, mask)
+      case chan :: "b" :: Nil if isChan(chan)=> ChanBanMaskMode(unset, chan, "")
+      case chan :: ("v"|"+v"|"-v") :: user :: Nil if isChan(chan) => ChanVoiceMode(unset, chan, user)
+      case chan :: ("k"|"+k"|"-k") :: key :: Nil if isChan(chan) => ChanKeyMode(unset, chan, key)
 
-      case user :: ("i"|"+i"|"-i") :: Nil => Some(UserInvisibleMode(unset, user))
-      case user :: ("s"|"+s"|"-s") :: Nil => Some(UserReceiveServerNoticesMode(unset, user))
-      case user :: ("w"|"+w"|"-w") :: Nil => Some(UserReceiveWallopsMode(unset, user))
-      case user :: ("o"|"+o"|"-o") :: Nil => Some(UserOperatorMode(unset, user))
-      case _ => None
+      case user :: ("i"|"+i"|"-i") :: Nil => UserInvisibleMode(unset, user)
+      case user :: ("s"|"+s"|"-s") :: Nil => UserReceiveServerNoticesMode(unset, user)
+      case user :: ("w"|"+w"|"-w") :: Nil => UserReceiveWallopsMode(unset, user)
+      case user :: ("o"|"+o"|"-o") :: Nil => UserOperatorMode(unset, user)
     }
   }
 }
@@ -162,7 +161,7 @@ case class Kick(channel: String, user: String, comment: Option[String] = None) e
 case class Version(server: Option[String] = None) extends Message {
   def encode = {
     var out = "VERSION"
-    server foreach { s => "%s %s".format(out, s) }
+    server foreach { s => out = "%s %s".format(out, s) }
     out
   }
 }
@@ -292,166 +291,161 @@ object Protocol {
     decoders.get(cmd.toUpperCase) flatMap { _.lift(tail) }
   }
 
-  private[this] var decoders: Map[String, PartialFunction[List[String], Message]] =
-    Map(
-      ("PASS" -> {
-        case pass :: Nil => Pass(pass)
-      }),
+  private[this] var decoders: Map[String, PartialFunction[List[String], Message]] = Map(
+    ("PASS" -> {
+      case pass :: Nil => Pass(pass)
+    }),
 
-      ("NICK" -> {
-        case name :: hops :: Nil => Nick(name, Some(hops.toInt))
-        case name :: Nil => Nick(name)
-      }),
+    ("NICK" -> {
+      case name :: hops :: Nil => Nick(name, Some(hops.toInt))
+      case name :: Nil => Nick(name)
+    }),
 
-      ("USER" -> {
-        case n :: hn :: sn :: rn =>
-          var name = rn.mkString(" ")
-          if (name.startsWith(":")) name = name.tail
-          User(n, hn, sn, name)
-      }),
+    ("USER" -> {
+      case n :: hn :: sn :: rn :: Nil => User(n, hn, sn, rn)
+    }),
 
-      ("SERVER" -> {
-        case n :: hc :: i :: Nil => Server(n, hc.toInt, i)
-      }),
+    ("SERVER" -> {
+      case n :: hc :: i :: Nil => Server(n, hc.toInt, i)
+    }),
 
-      ("OPER" -> {
-        case u :: p :: Nil => Oper(u, p)
-      }),
+    ("OPER" -> {
+      case u :: p :: Nil => Oper(u, p)
+    }),
 
-      ("QUIT" -> {
-        case msg :: Nil => Quit(Some(msg))
-        case Nil => Quit()
-      }),
+    ("QUIT" -> {
+      case msg :: Nil => Quit(Some(msg))
+      case Nil => Quit()
+    }),
 
-      ("SQUIT" -> {
-        case s :: c :: Nil => ServerQuit(s, c)
-      }),
+    ("SQUIT" -> {
+      case s :: c :: Nil => ServerQuit(s, c)
+    }),
 
-      ("JOIN" -> {
-        case chans :: keys :: Nil => Join(chans.split(','), keys.split(','))
-        case chans :: Nil => Join(chans.split(','))
-      }),
+    ("JOIN" -> {
+      case chans :: keys :: Nil => Join(chans.split(','), keys.split(','))
+      case chans :: Nil => Join(chans.split(','))
+    }),
 
-      ("PART" -> {
-        case chans :: Nil => Part(chans.split(','))
-      }),
+    ("PART" -> {
+      case chans :: Nil => Part(chans.split(','))
+    }),
 
-      ("MODE" -> {
-        case Mode(mode) => mode
-      }),
+    ("MODE" -> {
+      case Mode(mode) => mode
+    }),
 
-      ("TOPIC" -> {
-        case chan :: Nil => Topic(chan)
-        case chan :: topic :: Nil => Topic(chan, Some(topic))
-      }),
+    ("TOPIC" -> {
+      case chan :: Nil => Topic(chan)
+      case chan :: topic :: Nil => Topic(chan, Some(topic))
+    }),
 
-      ("NAMES" -> {
-        case Nil => Names()
-        case names :: Nil => Names(names.split(","))
-      }),
+    ("NAMES" -> {
+      case Nil => Names()
+      case names :: Nil => Names(names.split(","))
+    }),
 
-      ("LIST" -> {
-        case Nil => ChanList()
-        case chans :: Nil => ChanList(chans.split(","))
-        case chans :: server :: Nil => ChanList(chans.split(","), Some(server))
-      }),
+    ("LIST" -> {
+      case Nil => ChanList()
+      case chans :: Nil => ChanList(chans.split(","))
+      case chans :: server :: Nil => ChanList(chans.split(","), Some(server))
+    }),
 
-      ("INVITE" -> {
-        case name :: chan :: Nil => Invite(name, chan)
-      }),
+    ("INVITE" -> {
+      case name :: chan :: Nil => Invite(name, chan)
+    }),
 
-      ("KICK" -> {
-        case chan :: user :: Nil => Kick(chan, user)
-        case chan :: user :: c :: Nil => Kick(chan, user, Some(c))
-      }),
+    ("KICK" -> {
+      case chan :: user :: Nil => Kick(chan, user)
+      case chan :: user :: c :: Nil => Kick(chan, user, Some(c))
+    }),
 
-      ("VERSION" -> {
-        case Nil => Version()
-        case server :: Nil => Version(Some(server))
-      }),
+    ("VERSION" -> {
+      case Nil => Version()
+      case server :: Nil => Version(Some(server))
+    }),
 
-      ("STATS" -> {
-        case Nil => Stats()
-        case query :: Nil => Stats(Some(query))
-        case query :: server :: Nil => Stats(Some(query), Some(server))
-      }),
+    ("STATS" -> {
+      case Nil => Stats()
+      case query :: Nil => Stats(Some(query))
+      case query :: server :: Nil => Stats(Some(query), Some(server))
+    }),
 
-      ("LINKS" -> {
-        case Nil => Links()
-        case mask :: Nil => Links(None, Some(mask))
-        case server :: mask :: Nil => Links(Some(server), Some(mask))
-      }),
+    ("LINKS" -> {
+      case Nil => Links()
+      case mask :: Nil => Links(None, Some(mask))
+      case server :: mask :: Nil => Links(Some(server), Some(mask))
+    }),
 
-      ("TIME" -> {
-        case Nil => ServerTime()
-        case server :: Nil => ServerTime(Some(server))
-      }),
+    ("TIME" -> {
+      case Nil => ServerTime()
+      case server :: Nil => ServerTime(Some(server))
+    }),
 
-      ("CONNECT" -> {
-        case server :: Nil => Connect(server)
-        case server :: port :: Nil => Connect(server, Some(port.toInt))
-        case server :: port :: rs :: Nil => Connect(server, Some(port.toInt), Some(rs))
-      }),
+    ("CONNECT" -> {
+      case server :: Nil => Connect(server)
+      case server :: port :: Nil => Connect(server, Some(port.toInt))
+      case server :: port :: rs :: Nil => Connect(server, Some(port.toInt), Some(rs))
+    }),
 
-      ("TRACE" -> {
-        case Nil => Trace()
-        case server :: Nil => Trace(Some(server))
-      }),
+    ("TRACE" -> {
+      case Nil => Trace()
+      case server :: Nil => Trace(Some(server))
+    }),
 
-      ("ADMIN" -> {
-        case Nil => Admin()
-        case server :: Nil => Admin(Some(server))
-      }),
+    ("ADMIN" -> {
+      case Nil => Admin()
+      case server :: Nil => Admin(Some(server))
+    }),
 
-      ("INFO" -> {
-        case Nil => Info()
-        case server :: Nil => Info(Some(server))
-      }),
+    ("INFO" -> {
+      case Nil => Info()
+      case server :: Nil => Info(Some(server))
+    }),
 
-      ("PRIVMSG" -> {
-        case recvs :: msg :: Nil => PrivMsg(recvs.split(","), msg)
-      }),
+    ("PRIVMSG" -> {
+      case recvs :: msg :: Nil => PrivMsg(recvs.split(","), msg)
+    }),
 
-      ("NOTICE" -> {
-        case name :: msg :: Nil => Notice(name, msg)
-      }),
+    ("NOTICE" -> {
+      case name :: msg :: Nil => Notice(name, msg)
+    }),
 
-      ("WHO" -> {
-        case Nil => Who()
-        case name :: Nil => Who(Some(name))
-        case name :: "o" :: Nil => Who(Some(name), true)
-      }),
+    ("WHO" -> {
+      case Nil => Who()
+      case name :: Nil => Who(Some(name))
+      case name :: "o" :: Nil => Who(Some(name), true)
+    }),
 
-      ("WHOIS" -> {
-        case nicks :: Nil => WhoIs(None, nicks.split(","))
-        case server :: nicks :: Nil => WhoIs(Some(server), nicks.split(","))
-      }),
+    ("WHOIS" -> {
+      case nicks :: Nil => WhoIs(None, nicks.split(","))
+      case server :: nicks :: Nil => WhoIs(Some(server), nicks.split(","))
+    }),
 
-      ("WHOWAS" -> {
-        case name :: Nil => WhoWas(name)
-        case name :: count :: Nil => WhoWas(name, Some(count.toInt))
-        case name :: count :: server :: Nil => WhoWas(name, Some(count.toInt), Some(server))
-      }),
+    ("WHOWAS" -> {
+      case name :: Nil => WhoWas(name)
+      case name :: count :: Nil => WhoWas(name, Some(count.toInt))
+      case name :: count :: server :: Nil => WhoWas(name, Some(count.toInt), Some(server))
+    }),
 
-      ("KILL" -> {
-        case name :: comment :: Nil => Kill(name, comment)
-      }),
+    ("KILL" -> {
+      case name :: comment :: Nil => Kill(name, comment)
+    }),
 
-      ("PING" -> {
-        case servers => Ping(servers)
-      }),
+    ("PING" -> {
+      case servers => Ping(servers)
+    }),
 
-      ("PONG" -> {
-        case daemons => Pong(daemons)
-      }),
+    ("PONG" -> {
+      case daemons => Pong(daemons)
+    }),
 
-      ("ERROR" -> {
-        case msg :: Nil => Error(msg)
-      }),
+    ("ERROR" -> {
+      case msg :: Nil => Error(msg)
+    }),
 
-      ("AWAY" -> {
-        case Nil => Away()
-        case msg :: Nil => Away(Some(msg))
-      })
-    )
+    ("AWAY" -> {
+      case Nil => Away()
+      case msg :: Nil => Away(Some(msg))
+    }))
 }
