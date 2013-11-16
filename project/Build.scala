@@ -2,12 +2,12 @@ import sbt._
 import Keys._
 
 object FinagleIrc extends Build {
-  val libVersion = "6.5.1"
+  val libVersion = "6.8.1"
 
   val baseSettings = Defaults.defaultSettings ++ Seq(
     libraryDependencies ++= Seq(
       "com.twitter" %% "finagle-core" % libVersion,
-      "com.twitter" %% "twitter-server" % "1.0.2"
+      "com.twitter" %% "twitter-server" % "1.3.1"
     ),
     resolvers += "twitter-repo" at "http://maven.twttr.com"
   )
@@ -41,7 +41,6 @@ object FinagleIrc extends Build {
   lazy val root = Project(id = "finagle-irc",
     base = file("."),
     settings = Defaults.itSettings ++ baseSettings ++ buildSettings ++ publishSettings)
-      .settings(net.virtualvoid.sbt.graph.Plugin.graphSettings: _*)
-      .configs( IntegrationTest)
+      .configs(IntegrationTest)
 
 }

@@ -33,8 +33,8 @@ object Irc
   extends Client[IrcHandle, Offer[Message]]
   with Server[IrcHandle, Offer[Message]]
 {
-  def newClient(group: Group[SocketAddress]): ServiceFactory[IrcHandle, Offer[Message]] =
-    IrcClient.newClient(group)
+  def newClient(name: Name, label: String): ServiceFactory[IrcHandle, Offer[Message]] =
+    IrcClient.newClient(name, label)
 
   def serve(addr: SocketAddress, service: ServiceFactory[IrcHandle, Offer[Message]]): ListeningServer =
     IrcServer.serve(addr, service)

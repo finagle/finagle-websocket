@@ -37,7 +37,7 @@ class Decoder extends FrameDecoder {
       def decode(cmdStr: String) = {
         val cmd :: tail = cmdStr.split(":", 2).toList: List[String]
         val tkns: List[String] = cmd.split(" ").toList ++ tail
-        Protocol.decode(tkns) getOrElse { UnknownCmd(tkns.first, tkns.tail.mkString(" ")) }
+        Protocol.decode(tkns) getOrElse { UnknownCmd(tkns.head, tkns.tail.mkString(" ")) }
       }
 
       if (!cmdStr.startsWith(":")) decode(cmdStr) else {
