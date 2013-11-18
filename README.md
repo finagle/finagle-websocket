@@ -23,7 +23,7 @@ Maven
     <dependency>
       <groupId>com.github.sprsquish</groupId>
       <artifactId>finagle-websockets_2.9.2</artifactId>
-      <version>6.5.0</version>
+      <version>6.8.1</version>
       <scope>compile</scope>
     </dependency>
 
@@ -31,7 +31,7 @@ sbt
 
     resolvers += "com.github.sprsquish" at "https://raw.github.com/sprsquish/mvn-repo/master"
 
-    "com.github.sprsquish" %% "finagle-websockets" % "6.5.0"
+    "com.github.sprsquish" %% "finagle-websockets" % "6.8.1"
 
 ### Client
 
