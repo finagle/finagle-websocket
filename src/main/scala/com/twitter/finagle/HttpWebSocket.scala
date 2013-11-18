@@ -44,8 +44,8 @@ object HttpWebSocket
   with Server[WebSocket, WebSocket]
   with WebSocketRichClient
 {
-  def newClient(group: Group[SocketAddress]): ServiceFactory[WebSocket, WebSocket] =
-    WebSocketClient.newClient(group)
+  def newClient(dest: Name, label: String): ServiceFactory[WebSocket, WebSocket] =
+    WebSocketClient.newClient(dest, label)
 
   def serve(addr: SocketAddress, service: ServiceFactory[WebSocket, WebSocket]): ListeningServer =
     WebSocketServer.serve(addr, service)
