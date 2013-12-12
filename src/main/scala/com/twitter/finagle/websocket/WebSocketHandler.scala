@@ -72,6 +72,7 @@ class WebSocketServerHandler extends WebSocketHandler {
             val webSocket = WebSocket(
               messages = messagesBroker.recv,
               uri = new URI(req.getUri),
+              headers = req.getHeaderNames().map(name => name -> req.getHeader(name)).toMap,
               onClose = closer,
               close = close)
 
