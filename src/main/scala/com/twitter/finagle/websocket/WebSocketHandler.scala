@@ -5,7 +5,7 @@ import com.twitter.finagle.channel.BrokerChannelHandler
 import com.twitter.finagle.netty3.Conversions._
 import com.twitter.finagle.netty3.{Cancelled, Ok, Error}
 import com.twitter.util.{Promise, Return, Throw, Try}
-import java.net.URI
+import java.net.{URI, InetSocketAddress}
 import org.jboss.netty.buffer.ChannelBuffer
 import org.jboss.netty.channel._
 import org.jboss.netty.handler.codec.http.websocketx._
@@ -69,10 +69,18 @@ class WebSocketServerHandler extends WebSocketHandler {
 
             def close() { Channels.close(ctx.getChannel) }
 
+            //Substitute localhost to allow easy hostname checking if the local and remote addresses are the same (i.e. socket originates and terminates on the same box)
+            var remoteAddress = if (ctx.getChannel.getLocalAddress.asInstanceOf[InetSocketAddress].getAddress == ctx.getChannel.getRemoteAddress.asInstanceOf[InetSocketAddress].getAddress) {
+              new InetSocketAddress("localhost", ctx.getChannel.getRemoteAddress.asInstanceOf[InetSocketAddress].getPort)
+            } else {
+              ctx.getChannel.getRemoteAddress.asInstanceOf[InetSocketAddress]
+            }
+
             val webSocket = WebSocket(
               messages = messagesBroker.recv,
               uri = new URI(req.getUri),
               headers = req.getHeaderNames().map(name => name -> req.getHeader(name)).toMap,
+              remoteAddress = remoteAddress,
               onClose = closer,
               close = close)
 
