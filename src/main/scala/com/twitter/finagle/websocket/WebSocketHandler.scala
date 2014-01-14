@@ -5,7 +5,7 @@ import com.twitter.finagle.channel.BrokerChannelHandler
 import com.twitter.finagle.netty3.Conversions._
 import com.twitter.finagle.netty3.{Cancelled, Ok, Error}
 import com.twitter.util.{Promise, Return, Throw, Try}
-import java.net.URI
+import java.net.{URI, InetSocketAddress}
 import org.jboss.netty.buffer.ChannelBuffer
 import org.jboss.netty.channel._
 import org.jboss.netty.handler.codec.http.websocketx._
@@ -72,6 +72,8 @@ class WebSocketServerHandler extends WebSocketHandler {
             val webSocket = WebSocket(
               messages = messagesBroker.recv,
               uri = new URI(req.getUri),
+              headers = req.getHeaderNames().map(name => name -> req.getHeader(name)).toMap,
+              remoteAddress = ctx.getChannel.getRemoteAddress,
               onClose = closer,
               close = close)
 
