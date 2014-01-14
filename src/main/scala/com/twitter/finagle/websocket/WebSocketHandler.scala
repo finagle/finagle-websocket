@@ -73,7 +73,7 @@ class WebSocketServerHandler extends WebSocketHandler {
               messages = messagesBroker.recv,
               uri = new URI(req.getUri),
               headers = req.getHeaderNames().map(name => name -> req.getHeader(name)).toMap,
-              remoteAddress = ctx.getChannel.getRemoteAddress.asInstanceOf[InetSocketAddress],
+              remoteAddress = ctx.getChannel.getRemoteAddress,
               onClose = closer,
               close = close)
 
