@@ -70,10 +70,9 @@ class WebSocketServerHandler extends WebSocketHandler {
             def close() { Channels.close(ctx.getChannel) }
 
             //Substitute localhost to allow easy hostname checking if the local and remote addresses are the same (i.e. socket originates and terminates on the same box)
-            var remoteAddress = if (ctx.getChannel.getLocalAddress.asInstanceOf[InetSocketAddress].getAddress == ctx.getChannel.getRemoteAddress.asInstanceOf[InetSocketAddress].getAddress) {
-              new InetSocketAddress("localhost", ctx.getChannel.getRemoteAddress.asInstanceOf[InetSocketAddress].getPort)
-            } else {
-              ctx.getChannel.getRemoteAddress.asInstanceOf[InetSocketAddress]
+            var remoteAddress = (ctx.getChannel.getLocalAddress, ctx.getChannel.getRemoteAddress) match {
+              case (l:InetSocketAddress, r:InetSocketAddress) if l.getAddress == r.getAddress => new InetSocketAddress("localhost", r.getPort)
+              case (_, r:InetSocketAddress) => r
             }
 
             val webSocket = WebSocket(
