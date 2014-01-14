@@ -10,7 +10,7 @@ case class WebSocket(
   messages: Offer[String],
   uri: URI,
   headers: Map[String, String] = Map.empty[String, String],
-  remoteAddress: SocketAddress = null,
+  remoteAddress: SocketAddress = new SocketAddress {},
   version: WebSocketVersion = WebSocketVersion.V13,
   onClose: Future[Unit] = new Promise[Unit],
   close: () => Unit = { () => () })
