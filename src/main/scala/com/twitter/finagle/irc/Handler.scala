@@ -2,7 +2,7 @@ package com.twitter.finagle.irc
 
 import com.twitter.finagle.irc.protocol.Message
 import com.twitter.concurrent.{Offer, Broker}
-import com.twitter.util.{Future, Promise, Return}
+import com.twitter.util.{Future, Promise}
 import org.jboss.netty.channel._
 
 case class IrcHandle(
@@ -16,7 +16,7 @@ private[irc] abstract class Handler extends SimpleChannelHandler {
   private[this] val onClose = new Promise[Unit]
 
   override def channelClosed(ctx: ChannelHandlerContext, e: ChannelStateEvent) {
-    onClose() = Return(())
+    onClose.setDone()
   }
 
   override def messageReceived(ctx: ChannelHandlerContext, e: MessageEvent) = {

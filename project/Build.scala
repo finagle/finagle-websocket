@@ -2,7 +2,7 @@ import sbt._
 import Keys._
 
 object FinagleIrc extends Build {
-  val libVersion = "6.11.1"
+  val libVersion = "6.13.1"
 
   val baseSettings = Defaults.defaultSettings ++ Seq(
     libraryDependencies ++= Seq(
