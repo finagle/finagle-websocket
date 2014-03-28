@@ -56,7 +56,7 @@ case class Channel(name: String) {
     _users filter { _.isVisible }
 
   def !(msg: Message): Future[Unit] =
-    Future.collect(_users map { _ ! msg } toSeq) flatMap { _ => Future.Done }
+    Future.collect(_users map { _ ! msg } toSeq).unit
 
   def setTopic(session: Session, topic: Option[String]): Future[Unit] = {
     // TODO: check permissions
@@ -78,7 +78,7 @@ case class Channel(name: String) {
         if (u.session == session) Future.Done
         else u ! session.from(PrivMsg(Seq(name), text))
       } toSeq
-    ) flatMap { _ => Future.Done }
+    ).unit
   }
 
   // TODO

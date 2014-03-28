@@ -58,12 +58,12 @@ class Server(
   } yield ()
 
   def withChans(chans: Seq[String])(f: Channel => Future[Unit]): Future[Unit] =
-    Future.collect(chans map { chan =>
+    Future.join(chans map { chan =>
       channels.get(chan) match {
         case Some(c) => f(c)
         case None => Future.Done
       }
-    }) flatMap { _ => Future.Done }
+    })
 
   def process(msg: Message, session: Session) = msg match {
     case Nick(n, _) =>
