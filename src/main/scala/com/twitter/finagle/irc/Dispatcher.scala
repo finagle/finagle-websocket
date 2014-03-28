@@ -21,15 +21,15 @@ sealed trait IrcDispatcher extends Closable {
 
   protected val handle = IrcHandle(inbound.recv, onClose, close)
 
-  private[this] def loopIn(): Future[Unit] =
-    trans.read() flatMap inbound.! before loopIn()
+  private[this] def loopRead(): Future[Unit] =
+    trans.read() flatMap inbound.! before loopRead()
 
-  private[this] def loopOut(out: Offer[Message]): Future[Unit] =
-    out.sync() flatMap trans.write before loopOut(out)
+  private[this] def loopWrite(out: Offer[Message]): Future[Unit] =
+    out.sync() flatMap trans.write before loopWrite(out)
 
   protected def loop(out: Offer[Message]) {
-    loopOut(out) onFailure { _ => close(Time.now) }
-    loopIn() onFailure { _ => close(Time.now) }
+    loopWrite(out) onFailure { _ => close(Time.now) }
+    loopRead() onFailure { _ => close(Time.now) }
   }
 
   override def close(deadline: Time): Future[Unit] = {
