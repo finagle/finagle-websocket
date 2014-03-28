@@ -7,8 +7,10 @@ import com.twitter.util.{Future, Time}
 import org.jboss.netty.buffer.{ChannelBuffer, ChannelBuffers}
 import org.jboss.netty.util.CharsetUtil
 
-case class IrcTransport(trans: Transport[ChannelBuffer, ChannelBuffer])
-extends Transport[Message, Message] {
+case class IrcTransport(
+  trans: Transport[ChannelBuffer, ChannelBuffer],
+  decoder: (List[String] => Option[Message]) = DefaultIrcDecoder
+) extends Transport[Message, Message] {
   private[this] val Delimiter = "\r\n"
   private[this] val ServerUser = """([^!]+)!?([^@]*)?@?(.+)?""".r
   @volatile private[this] var buf: Buf = Buf.Empty
@@ -48,7 +50,7 @@ extends Transport[Message, Message] {
     def decodeCmd(cmdStr: String) = {
       val cmd :: tail = cmdStr.split(":", 2).toList: List[String]
       val tkns: List[String] = cmd.split(" ").toList ++ tail
-      Protocol.decode(tkns) getOrElse { UnknownCmd(tkns.head, tkns.tail.mkString(" ")) }
+      decoder(tkns) getOrElse { UnknownCmd(tkns.head, tkns.tail.mkString(" ")) }
     }
 
     if (!cmdStr.startsWith(":")) decodeCmd(cmdStr) else {

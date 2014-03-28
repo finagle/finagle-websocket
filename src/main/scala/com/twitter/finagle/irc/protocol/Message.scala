@@ -284,14 +284,8 @@ case class Who(name: Option[String] = None, op: Boolean = false) extends Message
   }
 }
 
-
-object Protocol {
-  private[irc] def decode(tkns: List[String]): Option[Message] = {
-    val cmd :: tail = tkns
-    decoders.get(cmd.toUpperCase) flatMap { _.lift(tail) }
-  }
-
-  private[this] var decoders: Map[String, PartialFunction[List[String], Message]] = Map(
+object Decoders {
+  val default = Map[String, PartialFunction[List[String], Message]](
     ("PASS" -> {
       case pass :: Nil => Pass(pass)
     }),
@@ -449,3 +443,14 @@ object Protocol {
       case msg :: Nil => Away(Some(msg))
     }))
 }
+
+class IrcDecoder(
+  decoders: Map[String, PartialFunction[List[String], Message]]
+) extends (List[String] => Option[Message]) {
+  def apply(tkns: List[String]): Option[Message] = {
+    val cmd :: tail = tkns
+    decoders.get(cmd.toUpperCase) flatMap { _.lift(tail) }
+  }
+}
+
+object DefaultIrcDecoder extends IrcDecoder(Decoders.default)

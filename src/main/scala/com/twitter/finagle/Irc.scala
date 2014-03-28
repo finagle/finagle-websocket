@@ -22,7 +22,7 @@ object NettyTrans extends Netty3Transporter[ChannelBuffer, ChannelBuffer](
 object IrcClient extends DefaultClient[Offer[Message], IrcHandle](
   name = "irc",
   endpointer = Bridge[Message, Message,  Offer[Message], IrcHandle](
-    NettyTrans(_, _) map IrcTransport, new ClientDispatcher(_)))
+    NettyTrans(_, _) map { IrcTransport(_, DefaultIrcDecoder) }, new ClientDispatcher(_)))
 
 object IrcListener extends Listener[Message, Message] {
   private[this] val nettyListener = Netty3Listener[ChannelBuffer, ChannelBuffer]("irc", PipelineFactory)
