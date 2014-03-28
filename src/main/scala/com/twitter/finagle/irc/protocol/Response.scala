@@ -3,7 +3,7 @@ package com.twitter.finagle.irc.protocol
 sealed abstract class Response(val code: Int) extends Message
 
 case class ResponseWrapper(server: String, nick: String, resp: Response) extends Response(resp.code) {
-  def encode = ":%s %03d %s %s".format(server, resp.code, nick, resp.encode)
+  def encode = ":%s %03d %s %s".format(server, code, nick, resp.encode)
 }
 
 case class ErrNoSuchServer(server: String) extends Response(402) {

@@ -7,7 +7,7 @@ object FinagleIrc extends Build {
   val baseSettings = Defaults.defaultSettings ++ Seq(
     libraryDependencies ++= Seq(
       "com.twitter" %% "finagle-core" % libVersion,
-      "com.twitter" %% "twitter-server" % "1.4.1"
+      "com.twitter" %% "twitter-server" % "1.6.1"
     ),
     resolvers += "twitter-repo" at "http://maven.twttr.com"
   )

@@ -114,7 +114,7 @@ private object Mode {
       case chan :: ("m"|"+m"|"-m") :: Nil if isChan(chan) => ChanModeratedMode(unset, chan)
       case chan :: ("l"|"+l"|"-l") :: limit :: Nil if isChan(chan) => ChanUserLimitMode(unset, chan, limit.toInt)
       case chan :: ("+b"|"-b") :: mask :: Nil if isChan(chan)=> ChanBanMaskMode(unset, chan, mask)
-      case chan :: "b" :: Nil if isChan(chan)=> ChanBanMaskMode(unset, chan, "")
+      case chan :: "b" :: Nil if isChan(chan) => ChanBanMaskMode(unset, chan, "")
       case chan :: ("v"|"+v"|"-v") :: user :: Nil if isChan(chan) => ChanVoiceMode(unset, chan, user)
       case chan :: ("k"|"+k"|"-k") :: key :: Nil if isChan(chan) => ChanKeyMode(unset, chan, key)
 
