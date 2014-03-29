@@ -47,7 +47,7 @@ class Server(
     _ <- session ! RplCreated(start)
     _ <- session ! RplMyInfo(name, version, Seq("iOM"), Seq("ntmikbohv"))
     _ <- session ! RplMotdStart(name)
-    _ <- Future.collect(motd map { msg => session ! RplMotd(msg) })
+    _ <- Future.join(motd map { msg => session ! RplMotd(msg) })
     _ <- session ! RplEndOfMotd()
 
     _ <- session ! RplLUserClient(sessions.size, invisibles.size, servers.size)
@@ -78,12 +78,12 @@ class Server(
     case ChanList(chans, _) =>
       for {
         _ <- session ! RplListStart()
-        _ <- Future.collect(channels map { case (_, c) => session ! RplList(c.name, c.visibleUsers.size, c.topic) } toSeq)
+        _ <- Future.join(channels map { case (_, c) => session ! RplList(c.name, c.visibleUsers.size, c.topic) } toSeq)
         _ <- session ! RplListEnd()
       } yield ()
 
     case Join(chans, keys) =>
-      Future.collect(chans map { name =>
+      Future.join(chans map { name =>
         var newChan = false
         val chan = channels getOrElseUpdate(name, {
           newChan = true

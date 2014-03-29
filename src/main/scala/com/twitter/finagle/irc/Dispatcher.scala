@@ -28,8 +28,8 @@ sealed trait IrcDispatcher extends Closable {
     out.sync() flatMap trans.write before loopWrite(out)
 
   protected def loop(out: Offer[Message]) {
-    loopWrite(out) onFailure { _ => close(Time.now) }
-    loopRead() onFailure { _ => close(Time.now) }
+    loopWrite(out) onFailure { _ => close() }
+    loopRead() onFailure { _ => close() }
   }
 
   override def close(deadline: Time): Future[Unit] = {

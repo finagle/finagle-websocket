@@ -56,7 +56,7 @@ case class Channel(name: String) {
     _users filter { _.isVisible }
 
   def !(msg: Message): Future[Unit] =
-    Future.collect(_users map { _ ! msg } toSeq).unit
+    Future.join(_users map { _ ! msg } toSeq)
 
   def setTopic(session: Session, topic: Option[String]): Future[Unit] = {
     // TODO: check permissions
@@ -64,7 +64,7 @@ case class Channel(name: String) {
     this ! session.from(Topic(name, _topic))
   }
 
-  def who(session: Session): Future[Unit] = Future.collect(
+  def who(session: Session): Future[Unit] = Future.join(
     _users map { user =>
       // TODO: hopcount, servername
       session ! RplWhoReply(name, user.name, user.hostName, "", user.nick, user.modeString, 0, user.realName)
@@ -73,12 +73,12 @@ case class Channel(name: String) {
 
   def msg(session: Session, text: String): Future[Unit] = {
     //TODO: check for permission
-    Future.collect(
+    Future.join(
       _users map { u =>
         if (u.session == session) Future.Done
         else u ! session.from(PrivMsg(Seq(name), text))
       } toSeq
-    ).unit
+    )
   }
 
   // TODO

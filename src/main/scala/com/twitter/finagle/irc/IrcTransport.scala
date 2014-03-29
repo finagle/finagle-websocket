@@ -21,12 +21,12 @@ case class IrcTransport(
   def read(): Future[Message] = buf match {
     case Buf.Utf8(str) if str.contains(Delimiter) =>
       val msgs = str.split(Delimiter)
-      msgs.drop(1).mkString(Delimiter) match {
+      buf = msgs.drop(1).mkString(Delimiter) match {
         case "" =>
-          buf = Buf.Empty
+          Buf.Empty
         case newStr =>
           val post = if (str.endsWith(Delimiter)) Delimiter else ""
-          buf = Buf.Utf8(newStr + post)
+          Buf.Utf8(newStr + post)
       }
 
       Future.value(decode(msgs(0)))

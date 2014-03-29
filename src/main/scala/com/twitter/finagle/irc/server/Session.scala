@@ -57,7 +57,7 @@ class Session(server: Server, handle: IrcHandle) {
   }
 
   def quit(msg: Option[String]): Future[Unit] =
-    Future.collect(chans map { case (_, c) => c.quit(this, msg) } toSeq) map { _ => handle.close() }
+    Future.join(chans map { case (_, c) => c.quit(this, msg) } toSeq) map { _ => handle.close() }
 
   def isKnown = welcomed
   def isUnKnown = !isKnown
