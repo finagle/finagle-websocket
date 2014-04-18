@@ -38,7 +38,7 @@ object WebSocketClient extends DefaultClient[WebSocket, WebSocket](
 )
 
 object WebSocketListener extends Netty3Listener[WebSocket, WebSocket](
-  "websocket", WebSocketCodec().server(ServerCodecConfig("websocketserver", new SocketAddress{})).pipelineFactory
+  "websocket", WebSocketCodec().server(ServerCodecConfig("websocketserver", new SocketAddress {})).pipelineFactory
 )
 
 object WebSocketServer extends DefaultServer[WebSocket, WebSocket, WebSocket, WebSocket](
@@ -48,8 +48,7 @@ object WebSocketServer extends DefaultServer[WebSocket, WebSocket, WebSocket, We
 object HttpWebSocket
   extends Client[WebSocket, WebSocket]
   with Server[WebSocket, WebSocket]
-  with WebSocketRichClient
-{
+  with WebSocketRichClient {
   def newClient(dest: Name, label: String): ServiceFactory[WebSocket, WebSocket] =
     WebSocketClient.newClient(dest, label)
 
