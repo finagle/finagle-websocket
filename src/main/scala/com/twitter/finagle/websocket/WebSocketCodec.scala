@@ -3,9 +3,8 @@ package com.twitter.finagle.websocket
 import com.twitter.finagle.{Codec, CodecFactory}
 import org.jboss.netty.channel.{ChannelPipelineFactory, Channels}
 import org.jboss.netty.handler.codec.http._
-import org.jboss.netty.handler.codec.http.websocketx._
 
-case class WebSocketCodec extends CodecFactory[WebSocket, WebSocket] {
+case class WebSocketCodec() extends CodecFactory[WebSocket, WebSocket] {
   def server = Function.const {
     new Codec[WebSocket, WebSocket] {
       def pipelineFactory = new ChannelPipelineFactory {

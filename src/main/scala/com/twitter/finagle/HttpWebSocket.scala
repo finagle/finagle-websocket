@@ -11,10 +11,16 @@ import java.net.{SocketAddress, URI}
 
 trait WebSocketRichClient {
   def open(out: Offer[String], uri: String): Future[WebSocket] =
-    open(out, new URI(uri))
+    open(out, Offer.never, new URI(uri))
 
-  def open(out: Offer[String], uri: URI): Future[WebSocket] = {
-    val socket = WebSocket(messages = out, uri = uri)
+  def open(out: Offer[String], uri: URI): Future[WebSocket] =
+    open(out, Offer.never, uri)
+
+  def open(out: Offer[String], binaryOut: Offer[Array[Byte]], uri: String): Future[WebSocket] =
+    open(out, binaryOut, new URI(uri))
+
+  def open(out: Offer[String], binaryOut: Offer[Array[Byte]], uri: URI): Future[WebSocket] = {
+    val socket = WebSocket(messages = out, binaryMessages = binaryOut, uri = uri)
     val addr = uri.getHost + ":" + uri.getPort
     HttpWebSocket.newClient(addr).toService(socket)
   }
@@ -32,7 +38,7 @@ object WebSocketClient extends DefaultClient[WebSocket, WebSocket](
 )
 
 object WebSocketListener extends Netty3Listener[WebSocket, WebSocket](
-  "websocket", WebSocketCodec().server(ServerCodecConfig("websocketserver", new SocketAddress{})).pipelineFactory
+  "websocket", WebSocketCodec().server(ServerCodecConfig("websocketserver", new SocketAddress {})).pipelineFactory
 )
 
 object WebSocketServer extends DefaultServer[WebSocket, WebSocket, WebSocket, WebSocket](
