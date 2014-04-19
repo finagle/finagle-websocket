@@ -15,9 +15,11 @@ class WebSocketHandler extends SimpleChannelHandler {
   protected[this] val binaryMessagesBroker = new Broker[Array[Byte]]
   protected[this] val closer = new Promise[Unit]
 
-  protected[this] def write(ctx: ChannelHandlerContext,
-                            sock: WebSocket,
-                            ack: Option[Offer[Try[Unit]]] = None) {
+  protected[this] def write(
+    ctx: ChannelHandlerContext,
+    sock: WebSocket,
+    ack: Option[Offer[Try[Unit]]] = None
+  ) {
     def close() {
       sock.close()
       if (ctx.getChannel.isOpen) ctx.getChannel.close()
@@ -73,9 +75,7 @@ class WebSocketServerHandler extends WebSocketHandler {
           case Some(h) =>
             h.handshake(ctx.getChannel, req)
 
-            def close() {
-              Channels.close(ctx.getChannel)
-            }
+            def close() { Channels.close(ctx.getChannel) }
 
             val webSocket = WebSocket(
               messages = messagesBroker.recv,
@@ -90,9 +90,7 @@ class WebSocketServerHandler extends WebSocketHandler {
         }
 
       case frame: CloseWebSocketFrame =>
-        handshaker foreach {
-          _.close(ctx.getChannel, frame)
-        }
+        handshaker foreach { _.close(ctx.getChannel, frame) }
 
       case frame: PingWebSocketFrame =>
         ctx.getChannel.write(new PongWebSocketFrame(frame.getBinaryData))
@@ -100,16 +98,12 @@ class WebSocketServerHandler extends WebSocketHandler {
       case frame: TextWebSocketFrame =>
         val ch = ctx.getChannel
         ch.setReadable(false)
-        (messagesBroker ! frame.getText) ensure {
-          ch.setReadable(true)
-        }
+        (messagesBroker ! frame.getText) ensure { ch.setReadable(true) }
 
       case frame: BinaryWebSocketFrame =>
         val ch = ctx.getChannel
         ch.setReadable(false)
-        (binaryMessagesBroker ! frame.getBinaryData.array) ensure {
-          ch.setReadable(true)
-        }
+        (binaryMessagesBroker ! frame.getBinaryData.array) ensure { ch.setReadable(true) }
 
       case invalid =>
         Channels.fireExceptionCaught(ctx,
@@ -154,16 +148,12 @@ class WebSocketClientHandler extends WebSocketHandler {
       case frame: TextWebSocketFrame =>
         val ch = ctx.getChannel
         ch.setReadable(false)
-        (messagesBroker ! frame.getText) ensure {
-          ch.setReadable(true)
-        }
+        (messagesBroker ! frame.getText) ensure { ch.setReadable(true) }
 
       case frame: BinaryWebSocketFrame =>
         val ch = ctx.getChannel
         ch.setReadable(false)
-        (binaryMessagesBroker ! frame.getBinaryData.array) ensure {
-          ch.setReadable(true)
-        }
+        (binaryMessagesBroker ! frame.getBinaryData.array) ensure { ch.setReadable(true) }
 
       case invalid =>
         Channels.fireExceptionCaught(ctx,
@@ -177,9 +167,7 @@ class WebSocketClientHandler extends WebSocketHandler {
       case sock: WebSocket =>
         write(ctx, sock)
 
-        def close() {
-          Channels.close(ctx.getChannel)
-        }
+        def close() { Channels.close(ctx.getChannel) }
 
         val webSocket = sock.copy(
           messages = messagesBroker.recv,
@@ -192,9 +180,7 @@ class WebSocketClientHandler extends WebSocketHandler {
         val wsFactory = new WebSocketClientHandshakerFactory
         val hs = wsFactory.newHandshaker(sock.uri, sock.version, null, false, sock.headers)
         handshaker = Some(hs)
-        hs.handshake(ctx.getChannel) {
-          _ => e.getFuture.setSuccess()
-        }
+        hs.handshake(ctx.getChannel) { _ => e.getFuture.setSuccess() }
 
       case _: HttpRequest =>
         ctx.sendDownstream(e)

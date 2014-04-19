@@ -22,19 +22,13 @@ class EndToEndTest extends FunSuite {
         val outgoing = new Broker[String]
         val binaryOutgoing = new Broker[Array[Byte]]
         val socket = req.copy(messages = outgoing.recv, binaryMessages = binaryOutgoing.recv)
-        req.messages foreach {
-          msg =>
-            synchronized {
-              result += msg
-            }
-            latch.countDown()
+        req.messages foreach { msg =>
+          synchronized { result += msg }
+          latch.countDown()
         }
-        req.binaryMessages foreach {
-          binary =>
-            synchronized {
-              binaryResult ++= binary
-            }
-            latch.countDown()
+        req.binaryMessages foreach { binary =>
+          synchronized { binaryResult ++= binary }
+          latch.countDown()
         }
         Future.value(socket)
       }
@@ -42,22 +36,17 @@ class EndToEndTest extends FunSuite {
 
     val target = "ws://%s:%d/".format(addr.getHostName, addr.getPort)
 
-    val brokers = (0 until 5) map {
-      _ =>
-        val out = new Broker[String]
-        val binaryOut = new Broker[Array[Byte]]
-        Await.ready(HttpWebSocket.open(out.recv, binaryOut.recv, target))
-        (out, binaryOut)
+    val brokerPairs = (0 until 5) map { _ =>
+      val textOut = new Broker[String]
+      val binaryOut = new Broker[Array[Byte]]
+      Await.ready(HttpWebSocket.open(textOut.recv, binaryOut.recv, target))
+      (textOut, binaryOut)
     }
 
-    brokers foreach {
-      pair =>
-        FuturePool.unboundedPool {
-          pair._1 !! "1"
-        }
-        FuturePool.unboundedPool {
-          pair._2 !! Array[Byte](0x01)
-        }
+    brokerPairs foreach { pair =>
+      val (textBroker, binaryBrocker) = pair
+      FuturePool.unboundedPool { textBroker !! "1" }
+      FuturePool.unboundedPool { binaryBrocker !! Array[Byte](0x01) }
     }
 
     latch.within(1.second)

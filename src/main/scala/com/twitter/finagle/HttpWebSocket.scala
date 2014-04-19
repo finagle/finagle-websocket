@@ -48,7 +48,8 @@ object WebSocketServer extends DefaultServer[WebSocket, WebSocket, WebSocket, We
 object HttpWebSocket
   extends Client[WebSocket, WebSocket]
   with Server[WebSocket, WebSocket]
-  with WebSocketRichClient {
+  with WebSocketRichClient
+{
   def newClient(dest: Name, label: String): ServiceFactory[WebSocket, WebSocket] =
     WebSocketClient.newClient(dest, label)
 
