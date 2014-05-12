@@ -58,10 +58,13 @@ object FinagleLibs extends Build {
   ).aggregate(finagleIrc, finagleWebsocket)
 
   lazy val finagleIrc =
-    finProject("irc").settings(
+    finProject("irc")
+
+  lazy val finagleIrcServer =
+    finProject("irc-server").settings(
       libraryDependencies ++= Seq(
         "com.twitter" %% "twitter-server" % "1.6.1")
-    )
+    ).dependsOn(finagleIrc)
 
   lazy val finagleWebsocket =
     finProject("websocket")
