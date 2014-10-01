@@ -96,6 +96,8 @@ class WebSocketServerHandler extends WebSocketHandler {
       case frame: PingWebSocketFrame =>
         ctx.getChannel.write(new PongWebSocketFrame(frame.getBinaryData))
 
+      case frame: PongWebSocketFrame => { }
+
       case frame: TextWebSocketFrame =>
         val ch = ctx.getChannel
         ch.setReadable(false)
@@ -123,6 +125,12 @@ class WebSocketServerHandler extends WebSocketHandler {
       case _: CloseWebSocketFrame =>
         ctx.sendDownstream(e)
 
+      case _: PingWebSocketFrame =>
+        ctx.sendDownstream(e)
+
+      case _: PongWebSocketFrame =>
+        ctx.sendDownstream(e)
+
       case invalid =>
         Channels.fireExceptionCaught(ctx,
           new IllegalArgumentException("invalid message \"%s\"".format(invalid)))
@@ -145,6 +153,8 @@ class WebSocketClientHandler extends WebSocketHandler {
 
       case frame: PingWebSocketFrame =>
         ctx.getChannel.write(new PongWebSocketFrame(frame.getBinaryData))
+
+      case frame: PongWebSocketFrame => { }
 
       case frame: TextWebSocketFrame =>
         val ch = ctx.getChannel
@@ -187,6 +197,12 @@ class WebSocketClientHandler extends WebSocketHandler {
         ctx.sendDownstream(e)
 
       case _: CloseWebSocketFrame =>
+        ctx.sendDownstream(e)
+
+      case _: PingWebSocketFrame =>
+        ctx.sendDownstream(e)
+
+      case _: PongWebSocketFrame =>
         ctx.sendDownstream(e)
 
       case invalid =>
