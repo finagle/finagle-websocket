@@ -1,7 +1,7 @@
 package com.twitter.finagle.websocket
 
 import com.twitter.concurrent.Offer
-import com.twitter.util.{Future, Promise}
+import com.twitter.util.{Duration, Future, Promise}
 import java.net.URI
 import org.jboss.netty.handler.codec.http.websocketx.WebSocketVersion
 import java.net.SocketAddress
@@ -14,4 +14,5 @@ case class WebSocket(
   remoteAddress: SocketAddress = new SocketAddress {},
   version: WebSocketVersion = WebSocketVersion.V13,
   onClose: Future[Unit] = new Promise[Unit],
-  close: () => Unit = { () => () })
+  close: () => Unit = { () => () },
+  var idlePingTimeout: Duration = Duration.Top)
