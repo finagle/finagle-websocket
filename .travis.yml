@@ -1,2 +1,10 @@
 language: scala
-script: "sbt +test"
+
+scala:
+  - 2.10.4
+  - 2.11.4
+
+jdk:
+  - oraclejdk7
+  - oraclejdk8
+  - openjdk7
