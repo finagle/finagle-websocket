@@ -119,9 +119,6 @@ class WebSocketServerHandler extends WebSocketHandler {
       case _: HttpResponse =>
         ctx.sendDownstream(e)
 
-      case _: PingWebSocketFrame =>
-        ctx.sendDownstream(e)
-
       case _: PongWebSocketFrame =>
         ctx.sendDownstream(e)
 
