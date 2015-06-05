@@ -2,7 +2,7 @@ import sbt._
 import Keys._
 
 object FinagleWebsocket extends Build {
-  val libVersion = "6.24.0"
+  val libVersion = "6.25.0"
 
   val baseSettings = Defaults.defaultSettings ++ Seq(
     libraryDependencies ++= Seq(
