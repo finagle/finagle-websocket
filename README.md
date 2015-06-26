@@ -1,10 +1,17 @@
-Finagle Websocket
+# Finagle Websocket
 
-[![Build Status](https://travis-ci.org/finagle/finagle-websocket.png)](https://travis-ci.org/finagle/finagle-websocket)
-
-## Warning: This is still Beta.
+[![Build status](https://travis-ci.org/finagle/finagle-websocket.svg?branch=master)](https://travis-ci.org/finagle/finagle-websocket)
+[![Coverage status](https://img.shields.io/coveralls/finagle/finagle-websocket/master.svg)](https://coveralls.io/r/finagle/finagle-websocket?branch=master)
+[![Project status](https://img.shields.io/badge/status-inactive-yellow.svg)](#status)
 
 Websockets support for Finagle
+
+## Status
+
+This project is inactive. While we are keep it up to date with new Finagle
+releases, it is not currently being actively used or developed. If you're using
+Finagle Websocket and would be interested in discussing co-ownership, please
+[file an issue](https://github.com/finagle/finagle-websocket/issues).
 
 ## Using websockets
 
