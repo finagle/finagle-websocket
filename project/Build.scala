@@ -1,13 +1,14 @@
 import sbt._
 import Keys._
+import scoverage.ScoverageSbtPlugin
 
 object FinagleWebsocket extends Build {
-  val libVersion = "6.25.0"
+  val libVersion = "6.26.0"
 
   val baseSettings = Defaults.defaultSettings ++ Seq(
     libraryDependencies ++= Seq(
       "com.twitter" %% "finagle-core" % libVersion,
-      "org.scalatest" %% "scalatest" % "2.2.2" % "test",
+      "org.scalatest" %% "scalatest" % "2.2.5" % "test",
       "junit" % "junit" % "4.12" % "test"
     )
   )
@@ -15,9 +16,15 @@ object FinagleWebsocket extends Build {
   lazy val buildSettings = Seq(
     organization := "com.github.finagle",
     version := libVersion,
-    scalaVersion := "2.11.6",
-    crossScalaVersions := Seq("2.10.4", "2.11.6"),
-    scalacOptions ++= Seq("-deprecation", "-feature")
+    scalaVersion := "2.10.5",
+    crossScalaVersions := Seq("2.10.5", "2.11.7"),
+    scalacOptions ++= Seq("-deprecation", "-feature"),
+    ScoverageSbtPlugin.ScoverageKeys.coverageHighlighting := (
+      CrossVersion.partialVersion(scalaVersion.value) match {
+        case Some((2, 10)) => false
+        case _ => true
+      }
+    )
   )
 
   lazy val publishSettings = Seq(
@@ -40,26 +47,13 @@ object FinagleWebsocket extends Build {
         </developers>)
   )
 
-  def finProject(n: String): Project = {
-    val name = "finagle-" + n
-    Project(
-      id = name,
-      base = file(name),
-      settings =
-        Defaults.itSettings ++
-        baseSettings ++
-        buildSettings ++
-        publishSettings
-    ).configs(IntegrationTest)
-  }
-
-  lazy val finagleWebsocketRoot = Project(
-    id = "finagle-websocket-root",
+  lazy val finagleWebsocket = Project(
+    id = "finagle-websocket",
     base = file("."),
-    settings = Project.defaultSettings ++ buildSettings
-  ).aggregate(finagleWebsocket)
-
-  lazy val finagleWebsocket =
-    finProject("websocket")
+    settings =
+      Defaults.itSettings ++
+      baseSettings ++
+      buildSettings ++
+      publishSettings
+  ).configs(IntegrationTest)
 }
-
