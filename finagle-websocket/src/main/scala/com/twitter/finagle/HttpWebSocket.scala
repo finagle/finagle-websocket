@@ -53,6 +53,9 @@ object HttpWebSocket
   def newClient(dest: Name, label: String): ServiceFactory[WebSocket, WebSocket] =
     WebSocketClient.newClient(dest, label)
 
+  def newService(dest: Name, label: String): Service[WebSocket, WebSocket] =
+    WebSocketClient.newService(dest, label)
+
   def serve(addr: SocketAddress, service: ServiceFactory[WebSocket, WebSocket]): ListeningServer =
     WebSocketServer.serve(addr, service)
 }

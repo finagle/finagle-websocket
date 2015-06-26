@@ -2,7 +2,7 @@ import sbt._
 import Keys._
 
 object FinagleWebsocket extends Build {
-  val libVersion = "6.24.0"
+  val libVersion = "6.25.0"
 
   val baseSettings = Defaults.defaultSettings ++ Seq(
     libraryDependencies ++= Seq(
@@ -15,8 +15,8 @@ object FinagleWebsocket extends Build {
   lazy val buildSettings = Seq(
     organization := "com.github.finagle",
     version := libVersion,
-    scalaVersion := "2.10.4",
-    crossScalaVersions := Seq("2.10.4", "2.11.4"),
+    scalaVersion := "2.11.6",
+    crossScalaVersions := Seq("2.10.4", "2.11.6"),
     scalacOptions ++= Seq("-deprecation", "-feature")
   )
 
