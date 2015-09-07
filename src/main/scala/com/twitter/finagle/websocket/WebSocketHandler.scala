@@ -1,6 +1,7 @@
 package com.twitter.finagle.websocket
 
 import com.twitter.concurrent.{Offer, Broker}
+import com.twitter.finagle.CancelledRequestException
 import com.twitter.util.{Future, Promise, Return, Throw, Try}
 import java.net.URI
 import org.jboss.netty.buffer.ChannelBuffers
@@ -9,36 +10,26 @@ import org.jboss.netty.handler.codec.http.websocketx._
 import org.jboss.netty.handler.codec.http.{HttpHeaders, HttpRequest, HttpResponse}
 import scala.collection.JavaConversions._
 
-private[finagle] class CancelledException extends Exception
-
 class WebSocketHandler extends SimpleChannelHandler {
   protected[this] val messagesBroker = new Broker[String]
   protected[this] val binaryMessagesBroker = new Broker[Array[Byte]]
   protected[this] val closer = new Promise[Unit]
 
-  implicit class RichChannelFuture(future: ChannelFuture) {
-    private[this] val promise = new Promise[Unit]
+  protected[this] def channelFutureToOffer(future: ChannelFuture): Offer[Try[Unit]] = {
+    val promise = new Promise[Unit]
 
     future.addListener(new ChannelFutureListener {
       def operationComplete(cf: ChannelFuture) {
         if(cf.isSuccess)
           promise.setValue(())
         else if(cf.isCancelled)
-          promise.setException(new CancelledException)
+          promise.setException(new CancelledRequestException)
         else
           promise.setException(cf.getCause)
       }
     })
 
-
-    def toFuture:Future[Unit] = {
-      promise
-    }
-
-    def toOffer:Offer[Try[Unit]] = {
-      promise.toOffer
-    }
-
+    promise.toOffer
   }
 
   protected[this] def write(
@@ -67,14 +58,14 @@ class WebSocketHandler extends SimpleChannelHandler {
               val frame = new TextWebSocketFrame(message)
               val writeFuture = Channels.future(ctx.getChannel)
               Channels.write(ctx, writeFuture, frame)
-              write(ctx, sock, Some(writeFuture.toOffer))
+              write(ctx, sock, Some(channelFutureToOffer(writeFuture)))
           },
           sock.binaryMessages {
             binary =>
               val frame = new BinaryWebSocketFrame(ChannelBuffers.wrappedBuffer(binary))
               val writeFuture = Channels.future(ctx.getChannel)
               Channels.write(ctx, writeFuture, frame)
-              write(ctx, sock, Some(writeFuture.toOffer))
+              write(ctx, sock, Some(channelFutureToOffer(writeFuture)))
           }
         )
     }
