@@ -2,7 +2,8 @@ package com.twitter.finagle.websocket
 
 import com.twitter.concurrent.{Offer, Broker}
 import com.twitter.finagle.CancelledRequestException
-import com.twitter.util.{Future, Promise, Return, Throw, Try}
+import com.twitter.finagle.util.DefaultTimer
+import com.twitter.util.{Future, Promise, Return, Throw, Try, TimerTask}
 import java.net.URI
 import org.jboss.netty.buffer.ChannelBuffers
 import org.jboss.netty.channel._
@@ -14,6 +15,7 @@ class WebSocketHandler extends SimpleChannelHandler {
   protected[this] val messagesBroker = new Broker[String]
   protected[this] val binaryMessagesBroker = new Broker[Array[Byte]]
   protected[this] val closer = new Promise[Unit]
+  protected[this] val timer = DefaultTimer.twitter
 
   protected[this] def channelFutureToOffer(future: ChannelFuture): Offer[Try[Unit]] = {
     val promise = new Promise[Unit]
@@ -151,6 +153,7 @@ class WebSocketServerHandler extends WebSocketHandler {
 
 class WebSocketClientHandler extends WebSocketHandler {
   @volatile private[this] var handshaker: Option[WebSocketClientHandshaker] = None
+  private[this] var keepAliveTask: Option[TimerTask] = None
 
   override def messageReceived(ctx: ChannelHandlerContext, e: MessageEvent) = {
     e.getMessage match {
@@ -164,6 +167,9 @@ class WebSocketClientHandler extends WebSocketHandler {
 
       case frame: PingWebSocketFrame =>
         ctx.getChannel.write(new PongWebSocketFrame(frame.getBinaryData))
+
+      case frame: PongWebSocketFrame =>
+        // do nothing
 
       case frame: TextWebSocketFrame =>
         val ch = ctx.getChannel
@@ -187,7 +193,10 @@ class WebSocketClientHandler extends WebSocketHandler {
       case sock: WebSocket =>
         write(ctx, sock)
 
-        def close() { Channels.close(ctx.getChannel) }
+        def close() {
+          keepAliveTask.foreach(_.close())
+          Channels.close(ctx.getChannel)
+        }
 
         val webSocket = sock.copy(
           messages = messagesBroker.recv,
@@ -202,6 +211,15 @@ class WebSocketClientHandler extends WebSocketHandler {
         handshaker = Some(hs)
         hs.handshake(ctx.getChannel).addListener(new ChannelFutureListener {
           override def operationComplete(f:ChannelFuture) {
+
+            // initiate the keep-alive
+            for(interval <- sock.keepAlive) {
+              timer.schedule(interval) {
+                ctx.getChannel.write(new PingWebSocketFrame())
+              }
+
+            }
+
             e.getFuture.setSuccess()
           }
         })
@@ -210,6 +228,9 @@ class WebSocketClientHandler extends WebSocketHandler {
         ctx.sendDownstream(e)
 
       case _: CloseWebSocketFrame =>
+        ctx.sendDownstream(e)
+
+      case _: PingWebSocketFrame =>
         ctx.sendDownstream(e)
 
       case invalid =>

@@ -6,7 +6,7 @@ import com.twitter.finagle.dispatch.{SerialServerDispatcher, SerialClientDispatc
 import com.twitter.finagle.netty3._
 import com.twitter.finagle.server._
 import com.twitter.concurrent.Offer
-import com.twitter.util.Future
+import com.twitter.util.{Duration, Future}
 import java.net.{SocketAddress, URI}
 
 trait WebSocketRichClient {
@@ -19,8 +19,11 @@ trait WebSocketRichClient {
   def open(out: Offer[String], binaryOut: Offer[Array[Byte]], uri: String): Future[WebSocket] =
     open(out, binaryOut, new URI(uri))
 
-  def open(out: Offer[String], binaryOut: Offer[Array[Byte]], uri: URI): Future[WebSocket] = {
-    val socket = WebSocket(messages = out, binaryMessages = binaryOut, uri = uri)
+  def open(out: Offer[String], binaryOut: Offer[Array[Byte]], uri: String, keepAlive: Option[Duration]): Future[WebSocket] =
+    open(out, binaryOut, new URI(uri), keepAlive = keepAlive)
+
+  def open(out: Offer[String], binaryOut: Offer[Array[Byte]], uri: URI, keepAlive: Option[Duration] = None): Future[WebSocket] = {
+    val socket = WebSocket(messages = out, binaryMessages = binaryOut, uri = uri, keepAlive = keepAlive)
     val addr = uri.getHost + ":" + uri.getPort
     HttpWebSocket.newClient(addr).toService(socket)
   }
