@@ -85,7 +85,9 @@ class WebSocketServerHandler extends WebSocketHandler {
   override def messageReceived(ctx: ChannelHandlerContext, e: MessageEvent) = {
     e.getMessage match {
       case req: HttpRequest =>
-        val location = "ws://" + req.headers.get(HttpHeaders.Names.HOST) + "/"
+        val scheme = if(req.getUri.startsWith("wss")) "wss" else "ws"
+
+        val location = scheme + "://" + req.headers.get(HttpHeaders.Names.HOST) + "/"
         val wsFactory = new WebSocketServerHandshakerFactory(location, null, false)
         handshaker = Option(wsFactory.newHandshaker(req))
         handshaker match {

@@ -4,10 +4,14 @@ import com.twitter.finagle.websocket.{WebSocket, WebSocketCodec}
 import com.twitter.finagle.client._
 import com.twitter.finagle.dispatch.{SerialServerDispatcher, SerialClientDispatcher}
 import com.twitter.finagle.netty3._
+import com.twitter.finagle.param.{ProtocolLibrary, Stats}
 import com.twitter.finagle.server._
+import com.twitter.finagle.ssl.Ssl
+import com.twitter.finagle.transport.Transport
 import com.twitter.concurrent.Offer
 import com.twitter.util.{Duration, Future}
-import java.net.{SocketAddress, URI}
+import java.net.{InetSocketAddress, SocketAddress, URI}
+import org.jboss.netty.channel.Channel
 
 trait WebSocketRichClient {
   def open(out: Offer[String], uri: String): Future[WebSocket] =
@@ -23,22 +27,60 @@ trait WebSocketRichClient {
     open(out, binaryOut, new URI(uri), keepAlive = keepAlive)
 
   def open(out: Offer[String], binaryOut: Offer[Array[Byte]], uri: URI, keepAlive: Option[Duration] = None): Future[WebSocket] = {
-    val socket = WebSocket(messages = out, binaryMessages = binaryOut, uri = uri, keepAlive = keepAlive)
+    val socket = WebSocket(
+      messages = out,
+      binaryMessages = binaryOut,
+      uri = uri,
+      keepAlive = keepAlive)
     val addr = uri.getHost + ":" + uri.getPort
-    HttpWebSocket.newClient(addr).toService(socket)
+
+    var cli = HttpWebSocket.client
+
+    if(uri.getScheme == "wss")
+      cli = cli.withTlsWithoutValidation()
+
+    cli.newClient(addr).toService(socket)
   }
 }
 
-object WebSocketTransporter extends Netty3Transporter[WebSocket, WebSocket](
-  "websocket", WebSocketCodec().client(ClientCodecConfig("websocketclient")).pipelineFactory
-)
+object WebSocketClient {
+  val stack: Stack[ServiceFactory[WebSocket, WebSocket]] =
+    StackClient.newStack
+}
 
-object WebSocketClient extends DefaultClient[WebSocket, WebSocket](
-  name = "websocket",
-  endpointer = Bridge[WebSocket, WebSocket, WebSocket, WebSocket](
-    WebSocketTransporter, new SerialClientDispatcher(_)),
-  pool = DefaultPool[WebSocket, WebSocket]()
-)
+
+case class WebSocketClient(
+  stack: Stack[ServiceFactory[WebSocket, WebSocket]] = WebSocketClient.stack,
+  params: Stack.Params = StackClient.defaultParams + ProtocolLibrary("websocket")
+) extends StdStackClient[WebSocket, WebSocket, WebSocketClient] {
+  protected type In = WebSocket
+  protected type Out = WebSocket
+
+  protected def newTransporter(): Transporter[WebSocket, WebSocket] = {
+    val com.twitter.finagle.param.Label(label) = params[com.twitter.finagle.param.Label]
+    val codec = WebSocketCodec()
+      .client(ClientCodecConfig(label))
+    val Stats(stats) = params[Stats]
+    val newTransport = (ch: Channel) => codec.newClientTransport(ch, stats)
+    Netty3Transporter(
+      codec.pipelineFactory,
+      params + Netty3Transporter.TransportFactory(newTransport))
+  }
+
+  protected def copy1(
+    stack: Stack[ServiceFactory[WebSocket, WebSocket]] = this.stack,
+    params: Stack.Params = this.params
+  ): WebSocketClient = copy(stack, params)
+
+  protected def newDispatcher(transport: Transport[WebSocket, WebSocket]): Service[WebSocket, WebSocket] =
+    new SerialClientDispatcher(transport)
+
+  def withTlsWithoutValidation(): WebSocketClient =
+    configured(Transport.TLSClientEngine(Some({
+      case inet: InetSocketAddress => Ssl.clientWithoutCertificateValidation(inet.getHostName, inet.getPort)
+      case _ => Ssl.clientWithoutCertificateValidation()
+    })))
+}
 
 object WebSocketListener extends Netty3Listener[WebSocket, WebSocket](
   "websocket", WebSocketCodec().server(ServerCodecConfig("websocketserver", new SocketAddress {})).pipelineFactory
@@ -53,11 +95,13 @@ object HttpWebSocket
   with Server[WebSocket, WebSocket]
   with WebSocketRichClient
 {
-  def newClient(dest: Name, label: String): ServiceFactory[WebSocket, WebSocket] =
-    WebSocketClient.newClient(dest, label)
+  val client = WebSocketClient()
 
-  def newService(dest: Name, label: String): Service[WebSocket, WebSocket] =
-    WebSocketClient.newService(dest, label)
+  def newClient(dest: Name, label: String) =
+    client.newClient(dest, label)
+
+  def newService(dest: Name, label: String) =
+    client.newService(dest, label)
 
   def serve(addr: SocketAddress, service: ServiceFactory[WebSocket, WebSocket]): ListeningServer =
     WebSocketServer.serve(addr, service)
