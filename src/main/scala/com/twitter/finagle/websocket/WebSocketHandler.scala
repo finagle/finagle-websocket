@@ -1,8 +1,8 @@
 package com.twitter.finagle.websocket
 
 import com.twitter.concurrent.{Offer, Broker}
-import com.twitter.finagle.netty3.Conversions._
-import com.twitter.util.{Promise, Return, Throw, Try}
+import com.twitter.finagle.CancelledRequestException
+import com.twitter.util.{Future, Promise, Return, Throw, Try}
 import java.net.URI
 import org.jboss.netty.buffer.ChannelBuffers
 import org.jboss.netty.channel._
@@ -14,6 +14,23 @@ class WebSocketHandler extends SimpleChannelHandler {
   protected[this] val messagesBroker = new Broker[String]
   protected[this] val binaryMessagesBroker = new Broker[Array[Byte]]
   protected[this] val closer = new Promise[Unit]
+
+  protected[this] def channelFutureToOffer(future: ChannelFuture): Offer[Try[Unit]] = {
+    val promise = new Promise[Unit]
+
+    future.addListener(new ChannelFutureListener {
+      def operationComplete(cf: ChannelFuture) {
+        if(cf.isSuccess)
+          promise.setValue(())
+        else if(cf.isCancelled)
+          promise.setException(new CancelledRequestException)
+        else
+          promise.setException(cf.getCause)
+      }
+    })
+
+    promise.toOffer
+  }
 
   protected[this] def write(
     ctx: ChannelHandlerContext,
@@ -41,14 +58,14 @@ class WebSocketHandler extends SimpleChannelHandler {
               val frame = new TextWebSocketFrame(message)
               val writeFuture = Channels.future(ctx.getChannel)
               Channels.write(ctx, writeFuture, frame)
-              write(ctx, sock, Some(writeFuture.toTwitterFuture.toOffer))
+              write(ctx, sock, Some(channelFutureToOffer(writeFuture)))
           },
           sock.binaryMessages {
             binary =>
               val frame = new BinaryWebSocketFrame(ChannelBuffers.wrappedBuffer(binary))
               val writeFuture = Channels.future(ctx.getChannel)
               Channels.write(ctx, writeFuture, frame)
-              write(ctx, sock, Some(writeFuture.toTwitterFuture.toOffer))
+              write(ctx, sock, Some(channelFutureToOffer(writeFuture)))
           }
         )
     }
@@ -183,7 +200,11 @@ class WebSocketClientHandler extends WebSocketHandler {
         val wsFactory = new WebSocketClientHandshakerFactory
         val hs = wsFactory.newHandshaker(sock.uri, sock.version, null, false, sock.headers)
         handshaker = Some(hs)
-        hs.handshake(ctx.getChannel) { _ => e.getFuture.setSuccess() }
+        hs.handshake(ctx.getChannel).addListener(new ChannelFutureListener {
+          override def operationComplete(f:ChannelFuture) {
+            e.getFuture.setSuccess()
+          }
+        })
 
       case _: HttpRequest =>
         ctx.sendDownstream(e)
