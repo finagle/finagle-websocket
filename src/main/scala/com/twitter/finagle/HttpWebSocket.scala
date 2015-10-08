@@ -13,7 +13,7 @@ import com.twitter.util.{Duration, Future}
 import java.net.{InetSocketAddress, SocketAddress, URI}
 import org.jboss.netty.channel.Channel
 
-trait WebSocketRichClient {
+trait WebSocketRichClient { self: Client[WebSocket, WebSocket] =>
   def open(out: Offer[String], uri: String): Future[WebSocket] =
     open(out, Offer.never, new URI(uri))
 
@@ -50,8 +50,8 @@ object WebSocketClient {
 
 case class WebSocketClient(
   stack: Stack[ServiceFactory[WebSocket, WebSocket]] = WebSocketClient.stack,
-  params: Stack.Params = StackClient.defaultParams + ProtocolLibrary("websocket")
-) extends StdStackClient[WebSocket, WebSocket, WebSocketClient] {
+  params: Stack.Params = StackClient.defaultParams + ProtocolLibrary("websocket"))
+extends StdStackClient[WebSocket, WebSocket, WebSocketClient] {
   protected type In = WebSocket
   protected type Out = WebSocket
 
@@ -107,7 +107,6 @@ case class WebSocketServer(
     transport: Transport[WebSocket, WebSocket],
     service: Service[WebSocket, WebSocket]) = {
     val Stats(stats) = params[Stats]
-    println(stats)
 
     new SerialServerDispatcher(transport, service)
   }
@@ -122,10 +121,9 @@ case class WebSocketServer(
 }
 
 object HttpWebSocket
-  extends Client[WebSocket, WebSocket]
-  with Server[WebSocket, WebSocket]
-  with WebSocketRichClient
-{
+extends Client[WebSocket, WebSocket]
+with Server[WebSocket, WebSocket]
+with WebSocketRichClient {
   val client = WebSocketClient().configured(Label("websocket"))
   val server = WebSocketServer().configured(Label("websocket"))
 
