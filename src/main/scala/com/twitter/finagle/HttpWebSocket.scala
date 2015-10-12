@@ -96,11 +96,11 @@ case class WebSocketServer(
 
   protected def newListener(): Listener[WebSocket, WebSocket] = {
     val Label(label) = params[Label]
-    val wsPipeline = WebSocketCodec()
-      .server(ServerCodecConfig(label, new SocketAddress{}))
+    val pipeline = WebSocketCodec()
+      .server(ServerCodecConfig(label, new SocketAddress {}))
       .pipelineFactory
 
-    Netty3Listener(wsPipeline, params)
+    Netty3Listener(pipeline, params)
   }
 
   protected def newDispatcher(

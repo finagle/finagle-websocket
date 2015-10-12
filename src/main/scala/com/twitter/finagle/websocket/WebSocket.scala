@@ -2,6 +2,7 @@ package com.twitter.finagle.websocket
 
 import com.twitter.concurrent.Offer
 import com.twitter.util.{Future, Promise, Duration}
+import com.twitter.finagle.ChannelException
 import java.net.URI
 import org.jboss.netty.handler.codec.http.websocketx.WebSocketVersion
 import org.jboss.netty.handler.codec.http.websocketx.WebSocketFrame

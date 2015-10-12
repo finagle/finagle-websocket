@@ -1,7 +1,7 @@
 package com.twitter.finagle.websocket
 
 import com.twitter.concurrent.{Offer, Broker}
-import com.twitter.finagle.CancelledRequestException
+import com.twitter.finagle.{CancelledRequestException, ChannelException}
 import com.twitter.finagle.util.DefaultTimer
 import com.twitter.util.{Future, Promise, Return, Throw, Try, TimerTask}
 import java.net.URI
@@ -17,19 +17,21 @@ class WebSocketHandler extends SimpleChannelHandler {
   protected[this] val closer = new Promise[Unit]
   protected[this] val timer = DefaultTimer.twitter
 
+  private[this] class ListenerImpl(promise:Promise[Unit]) extends ChannelFutureListener {
+    def operationComplete(cf: ChannelFuture) {
+      if(cf.isSuccess)
+        promise.setValue(())
+      else if(cf.isCancelled)
+        promise.setException(new CancelledRequestException)
+      else
+        promise.setException(cf.getCause)
+    }
+  }
+
   protected[this] def channelFutureToOffer(future: ChannelFuture): Offer[Try[Unit]] = {
     val promise = new Promise[Unit]
 
-    future.addListener(new ChannelFutureListener {
-      def operationComplete(cf: ChannelFuture) {
-        if(cf.isSuccess)
-          promise.setValue(())
-        else if(cf.isCancelled)
-          promise.setException(new CancelledRequestException)
-        else
-          promise.setException(cf.getCause)
-      }
-    })
+    future.addListener(new ListenerImpl(promise))
 
     promise.toOffer
   }
@@ -81,13 +83,12 @@ class WebSocketHandler extends SimpleChannelHandler {
 }
 
 class WebSocketServerHandler extends WebSocketHandler {
-  @volatile private[this] var handshaker: Option[WebSocketServerHandshaker] = None
+  private[this] var handshaker: Option[WebSocketServerHandshaker] = None
 
   override def messageReceived(ctx: ChannelHandlerContext, e: MessageEvent) = {
     e.getMessage match {
       case req: HttpRequest =>
         val scheme = if(req.getUri.startsWith("wss")) "wss" else "ws"
-
         val location = scheme + "://" + req.headers.get(HttpHeaders.Names.HOST) + "/"
         val wsFactory = new WebSocketServerHandshakerFactory(location, null, false)
         handshaker = Option(wsFactory.newHandshaker(req))
