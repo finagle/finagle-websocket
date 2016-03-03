@@ -1,61 +1,57 @@
 package com.twitter.finagle
 
-import com.twitter.finagle.websocket.{WebSocket, WebSocketCodec}
+import com.twitter.finagle.websocket._
 import com.twitter.finagle.client._
-import com.twitter.finagle.dispatch.{SerialServerDispatcher, SerialClientDispatcher}
+import com.twitter.finagle.dispatch.{ SerialServerDispatcher, SerialClientDispatcher }
 import com.twitter.finagle.netty3._
-import com.twitter.finagle.param.{ProtocolLibrary, Stats, Label}
+import com.twitter.finagle.param.{ ProtocolLibrary, Stats, Label }
 import com.twitter.finagle.server._
 import com.twitter.finagle.ssl.Ssl
 import com.twitter.finagle.transport.Transport
-import com.twitter.concurrent.Offer
-import com.twitter.util.{Duration, Future}
-import java.net.{InetSocketAddress, SocketAddress, URI}
+import com.twitter.util.{ Duration, Future }
+import java.net.{ InetSocketAddress, SocketAddress, URI }
 import org.jboss.netty.channel.Channel
 
-trait WebSocketRichClient { self: Client[WebSocket, WebSocket] =>
-  def open(out: Offer[String], uri: String): Future[WebSocket] =
-    open(out, Offer.never, new URI(uri))
+trait WebSocketRichClient { self: Client[WebSocketStart, WebSocket] =>
+  def open(uri: String): Future[WebSocket] =
+    open(new URI(uri))
 
-  def open(out: Offer[String], uri: URI): Future[WebSocket] =
-    open(out, Offer.never, uri)
+  def open(uri: URI): Future[WebSocket] =
+    open(WebSocketStart(uri))
 
-  def open(out: Offer[String], binaryOut: Offer[Array[Byte]], uri: String): Future[WebSocket] =
-    open(out, binaryOut, new URI(uri))
+  def open(uri: String, keepAlive: Duration): Future[WebSocket] =
+    open(new URI(uri), keepAlive)
 
-  def open(out: Offer[String], binaryOut: Offer[Array[Byte]], uri: String, keepAlive: Option[Duration]): Future[WebSocket] =
-    open(out, binaryOut, new URI(uri), keepAlive = keepAlive)
+  def open(uri: URI, keepAlive: Duration): Future[WebSocket] =
+    open(WebSocketStart(uri), Some(keepAlive))
 
-  def open(out: Offer[String], binaryOut: Offer[Array[Byte]], uri: URI, keepAlive: Option[Duration] = None): Future[WebSocket] = {
-    val socket = WebSocket(
-      messages = out,
-      binaryMessages = binaryOut,
-      uri = uri,
-      keepAlive = keepAlive)
-    val addr = uri.getHost + ":" + uri.getPort
+  def open(start: WebSocketStart, keepAlive: Option[Duration] = None): Future[WebSocket] = {
+    val addr = start.uri.getHost + ":" + start.uri.getPort
 
     var cli = HttpWebSocket.client
 
-    if(uri.getScheme == "wss")
+    if (start.uri.getScheme == "wss")
       cli = cli.withTlsWithoutValidation()
 
-    cli.newClient(addr).toService(socket)
+    var svc = cli.newClient(addr).toService
+    keepAlive foreach { i => svc = KeepAlive(i) andThen svc }
+    svc(start)
   }
 }
 
 object WebSocketClient {
-  val stack: Stack[ServiceFactory[WebSocket, WebSocket]] =
+  val stack: Stack[ServiceFactory[WebSocketStart, WebSocket]] =
     StackClient.newStack
 }
 
 case class WebSocketClient(
-  stack: Stack[ServiceFactory[WebSocket, WebSocket]] = WebSocketClient.stack,
+  stack: Stack[ServiceFactory[WebSocketStart, WebSocket]] = WebSocketClient.stack,
   params: Stack.Params = StackClient.defaultParams + ProtocolLibrary("websocket"))
-extends StdStackClient[WebSocket, WebSocket, WebSocketClient] {
-  protected type In = WebSocket
+extends StdStackClient[WebSocketStart, WebSocket, WebSocketClient] {
+  protected type In = WebSocketStart
   protected type Out = WebSocket
 
-  protected def newTransporter(): Transporter[WebSocket, WebSocket] = {
+  protected def newTransporter(): Transporter[WebSocketStart, WebSocket] = {
     val Label(label) = params[Label]
     val Stats(stats) = params[Stats]
     val codec = WebSocketCodec()
@@ -68,11 +64,11 @@ extends StdStackClient[WebSocket, WebSocket, WebSocketClient] {
   }
 
   protected def copy1(
-    stack: Stack[ServiceFactory[WebSocket, WebSocket]] = this.stack,
+    stack: Stack[ServiceFactory[WebSocketStart, WebSocket]] = this.stack,
     params: Stack.Params = this.params
   ): WebSocketClient = copy(stack, params)
 
-  protected def newDispatcher(transport: Transport[WebSocket, WebSocket]): Service[WebSocket, WebSocket] =
+  protected def newDispatcher(transport: Transport[WebSocketStart, WebSocket]): Service[WebSocketStart, WebSocket] =
     new SerialClientDispatcher(transport)
 
   def withTlsWithoutValidation(): WebSocketClient =
@@ -83,18 +79,18 @@ extends StdStackClient[WebSocket, WebSocket, WebSocketClient] {
 }
 
 object WebSocketServer {
-  val stack: Stack[ServiceFactory[WebSocket, WebSocket]] =
+  val stack: Stack[ServiceFactory[WebSocket, Unit]] =
     StackServer.newStack
 }
 
 case class WebSocketServer(
-  stack: Stack[ServiceFactory[WebSocket, WebSocket]] = WebSocketServer.stack,
+  stack: Stack[ServiceFactory[WebSocket, Unit]] = WebSocketServer.stack,
   params: Stack.Params = StackServer.defaultParams + ProtocolLibrary("websocket")
-) extends StdStackServer[WebSocket, WebSocket, WebSocketServer] {
-  protected type In = WebSocket
+) extends StdStackServer[WebSocket, Unit, WebSocketServer] {
+  protected type In = Unit
   protected type Out = WebSocket
 
-  protected def newListener(): Listener[WebSocket, WebSocket] = {
+  protected def newListener(): Listener[Unit, WebSocket] = {
     val Label(label) = params[Label]
     val pipeline = WebSocketCodec()
       .server(ServerCodecConfig(label, new SocketAddress {}))
@@ -104,15 +100,15 @@ case class WebSocketServer(
   }
 
   protected def newDispatcher(
-    transport: Transport[WebSocket, WebSocket],
-    service: Service[WebSocket, WebSocket]) = {
+    transport: Transport[Unit, WebSocket],
+    service: Service[WebSocket, Unit]) = {
     val Stats(stats) = params[Stats]
 
     new SerialServerDispatcher(transport, service)
   }
 
   protected def copy1(
-    stack: Stack[ServiceFactory[WebSocket, WebSocket]] = this.stack,
+    stack: Stack[ServiceFactory[WebSocket, Unit]] = this.stack,
     params: Stack.Params = this.params
   ): WebSocketServer = copy(stack, params)
 
@@ -121,8 +117,8 @@ case class WebSocketServer(
 }
 
 object HttpWebSocket
-extends Client[WebSocket, WebSocket]
-with Server[WebSocket, WebSocket]
+extends Client[WebSocketStart, WebSocket]
+with Server[WebSocket, Unit]
 with WebSocketRichClient {
   val client = WebSocketClient().configured(Label("websocket"))
   val server = WebSocketServer().configured(Label("websocket"))
@@ -133,6 +129,6 @@ with WebSocketRichClient {
   def newService(dest: Name, label: String) =
     client.newService(dest, label)
 
-  def serve(addr: SocketAddress, service: ServiceFactory[WebSocket, WebSocket]): ListeningServer =
+  def serve(addr: SocketAddress, service: ServiceFactory[WebSocket, Unit]): ListeningServer =
     server.serve(addr, service)
 }

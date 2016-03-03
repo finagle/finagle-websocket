@@ -1,20 +1,37 @@
 package com.twitter.finagle.websocket
 
-import com.twitter.concurrent.Offer
-import com.twitter.util.{Future, Promise, Duration}
-import com.twitter.finagle.ChannelException
+import com.twitter.concurrent.AsyncStream
+import com.twitter.util.{ Closable, Future, Time }
+import com.twitter.io.Buf
+import java.net.SocketAddress
 import java.net.URI
 import org.jboss.netty.handler.codec.http.websocketx.WebSocketVersion
-import org.jboss.netty.handler.codec.http.websocketx.WebSocketFrame
-import java.net.SocketAddress
 
-case class WebSocket(
-  messages: Offer[String],
-  binaryMessages: Offer[Array[Byte]],
+case class WebSocketStart(
   uri: URI,
   headers: Map[String, String] = Map.empty[String, String],
-  remoteAddress: SocketAddress = new SocketAddress {},
-  version: WebSocketVersion = WebSocketVersion.V13,
-  onClose: Future[Unit] = new Promise[Unit],
-  close: () => Unit = { () => () },
-  keepAlive: Option[Duration] = None)
+  version: WebSocketVersion = WebSocketVersion.V13)
+
+abstract class WebSocket(
+  val uri: URI,
+  val headers: Map[String, String],
+  val remoteAddress: SocketAddress,
+  val version: WebSocketVersion,
+  val closed: Future[Unit]
+) extends Closable {
+
+  def close(deadline: Time): Future[Unit]
+
+  def write(msg: WebSocketFrame): Future[Unit]
+
+  def write(str: String): Future[Unit] =
+    write(WebSocketFrame.Text(str))
+
+  def write(buf: Buf): Future[Unit] =
+    write(WebSocketFrame.Binary(buf))
+
+  def write(bytes: Array[Byte]): Future[Unit] =
+    write(Buf.ByteArray.Shared(bytes))
+
+  def stream: AsyncStream[WebSocketFrame]
+}

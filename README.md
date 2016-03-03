@@ -29,7 +29,7 @@ Maven
 
     <dependency>
       <groupId>com.github.sprsquish</groupId>
-      <artifactId>finagle-websockets_2.9.2</artifactId>
+      <artifactId>finagle-websockets_2.11.7</artifactId>
       <version>6.8.1</version>
       <scope>compile</scope>
     </dependency>
@@ -38,31 +38,25 @@ sbt
 
     resolvers += "com.github.sprsquish" at "https://raw.github.com/sprsquish/mvn-repo/master"
 
-    "com.github.sprsquish" %% "finagle-websockets" % "6.8.1"
+    "com.github.sprsquish" %% "finagle-websockets" % "6.33.0"
 
 ### Client
 
     import com.twitter.finagle.HttpWebSocket
-    import com.twitter.concurrent.Broker
 
-    val out = new Broker[String]
-    HttpWebSocket.open(out.recv, "ws://localhost:8080/") onSuccess { resp =>
-      resp.messages foreach println
+    HttpWebSocket.open("ws://localhost:8080/") onSuccess { sock =>
+      sock.messages foreach println
     }
 
 ### Server
 
-    import com.twitter.concurrent.Broker
-    import com.twitter.finagle.{HttpWebSocket, Service}
+    import com.twitter.finagle.{ HttpWebSocket, Service }
     import com.twitter.finagle.websocket.WebSocket
     import com.twitter.util.Future
-    import java.net.InetSocketAddress
 
-    val server = HttpWebSocket.serve(":8080", new Service[WebSocket, WebSocket] {
-      def apply(req: WebSocket): Future[WebSocket] = {
-        val outgoing = new Broker[String]
-        val socket = req.copy(messages = outgoing.recv)
-        req.messages foreach { outgoing ! _.reverse }
-        Future.value(socket)
+    val server = HttpWebSocket.serve(":8080", new Service[WebSocket, Unit] {
+      def apply(sock: WebSocket): Future[WebSocket] = {
+        sock.stream foreach sock.write(_)
+        Future.Done
       }
     })

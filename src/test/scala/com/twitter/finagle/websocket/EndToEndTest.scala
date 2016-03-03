@@ -1,12 +1,14 @@
 package com.twitter.finagle.websocket
 
 import com.twitter.conversions.time._
-import org.scalatest.junit.JUnitRunner
-import org.scalatest.FunSuite
-import org.junit.runner.RunWith
-import com.twitter.concurrent.Broker
-import com.twitter.finagle.{HttpWebSocket, Service}
+import com.twitter.finagle.{ HttpWebSocket, Service }
+import com.twitter.io.Buf
 import com.twitter.util._
+import java.net.InetSocketAddress
+import javax.net.ssl.SSLContext
+import org.junit.runner.RunWith
+import org.scalatest.FunSuite
+import org.scalatest.junit.JUnitRunner
 import scala.collection.mutable.ArrayBuffer
 
 @RunWith(classOf[JUnitRunner])
@@ -14,43 +16,106 @@ class EndToEndTest extends FunSuite {
   test("multi client") {
     var result = ""
     val binaryResult = ArrayBuffer.empty[Byte]
-    val addr = RandomSocket()
     val latch = new CountDownLatch(10)
 
-    HttpWebSocket.serve(addr, new Service[WebSocket, WebSocket] {
-      def apply(req: WebSocket): Future[WebSocket] = {
-        val outgoing = new Broker[String]
-        val binaryOutgoing = new Broker[Array[Byte]]
-        val socket = req.copy(messages = outgoing.recv, binaryMessages = binaryOutgoing.recv)
-        req.messages foreach { msg =>
-          synchronized { result += msg }
-          latch.countDown()
+    val srv = HttpWebSocket.serve("127.0.0.1:0", new Service[WebSocket, Unit] {
+      def apply(sock: WebSocket): Future[Unit] = {
+        sock.stream foreach {
+          case WebSocketFrame.Text(str) =>
+            synchronized { result += str }
+            latch.countDown()
+
+          case WebSocketFrame.Binary(buf) =>
+            val res = new Array[Byte](1)
+            buf.write(res, 0)
+
+            synchronized { binaryResult ++= res }
+            latch.countDown()
+
+          case _ =>
         }
-        req.binaryMessages foreach { binary =>
-          synchronized { binaryResult ++= binary }
-          latch.countDown()
-        }
-        Future.value(socket)
+        Future.Done
       }
     })
 
-    val target = "ws://%s:%d/".format(addr.getHostName, addr.getPort)
+    val addr = srv.boundAddress.asInstanceOf[InetSocketAddress]
+    val target = s"ws://127.0.0.1:${addr.getPort}/"
 
-    val brokerPairs = (0 until 5) map { _ =>
-      val textOut = new Broker[String]
-      val binaryOut = new Broker[Array[Byte]]
-      Await.ready(HttpWebSocket.open(textOut.recv, binaryOut.recv, target))
-      (textOut, binaryOut)
+    val sockets = (0 until 5) map { _ =>
+      Await.result(HttpWebSocket.open(target))
     }
 
-    brokerPairs foreach { pair =>
-      val (textBroker, binaryBrocker) = pair
-      FuturePool.unboundedPool { textBroker !! "1" }
-      FuturePool.unboundedPool { binaryBrocker !! Array[Byte](0x01) }
+    sockets foreach { sock =>
+      FuturePool.unboundedPool {
+        Await.ready(sock.write("1") before sock.write(Array[Byte](0x02)))
+      }
     }
 
-    latch.within(1.second)
-    assert(result === "11111")
-    assert(binaryResult === ArrayBuffer(0x01, 0x01, 0x01, 0x01, 0x01))
+    try latch.within(1.second)
+    finally Await.ready(Closable.all(srv +: sockets: _*).close())
+    assert(result == "11111")
+    assert(binaryResult === ArrayBuffer(0x02, 0x02, 0x02, 0x02, 0x02))
+  }
+
+  test("keep alive and ping pong") {
+    val ping = new CountDownLatch(1)
+    val pong = new CountDownLatch(1)
+
+    val srv = HttpWebSocket.serve("127.0.0.1:0", PingPong andThen new Service[WebSocket, Unit] {
+      def apply(sock: WebSocket): Future[Unit] = {
+        sock.stream foreach {
+          case WebSocketFrame.Ping(_) => ping.countDown()
+          case _ =>
+        }
+        Future.Done
+      }
+    })
+
+    val addr = srv.boundAddress.asInstanceOf[InetSocketAddress]
+    val target = s"ws://127.0.0.1:${addr.getPort}/"
+    val clnt = Await.result(HttpWebSocket.open(target, 100.millisecond))
+    clnt.stream foreach {
+      case WebSocketFrame.Pong(_) => pong.countDown()
+      case _ =>
+    }
+
+    try {
+      ping.within(1.second)
+      pong.within(1.second)
+    } finally {
+      Await.ready(Closable.all(srv, clnt).close())
+    }
+  }
+
+  Seq(
+    WebSocketFrame.NormalClose(),
+    WebSocketFrame.GoingAway(),
+    WebSocketFrame.Error(),
+    WebSocketFrame.Invalid()
+  ) foreach { testFrame =>
+    test(s"close frame: ${testFrame.getClass.getName}") {
+      val latch = new CountDownLatch(1)
+      val closed = new CountDownLatch(1)
+      val srv = HttpWebSocket.serve("127.0.0.1:0", new Service[WebSocket, Unit] {
+        def apply(sock: WebSocket): Future[Unit] = {
+          sock.stream foreach { frame => if (frame == testFrame) latch.countDown() }
+          sock.closed foreach { _ => closed.countDown() }
+          Future.Done
+        }
+      })
+
+      val addr = srv.boundAddress.asInstanceOf[InetSocketAddress]
+      val target = s"ws://127.0.0.1:${addr.getPort}/"
+      val clnt = Await.result(HttpWebSocket.open(target))
+      clnt.write(testFrame)
+
+      try {
+        latch.within(500.milliseconds)
+        closed.within(500.milliseconds)
+        Await.result(clnt.closed, 500.milliseconds)
+      } finally {
+        Await.ready(Closable.all(srv, clnt).close())
+      }
+    }
   }
 }
