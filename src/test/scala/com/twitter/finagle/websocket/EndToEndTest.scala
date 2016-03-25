@@ -1,36 +1,39 @@
 package com.twitter.finagle.websocket
 
-import com.twitter.conversions.time._
-import org.scalatest.junit.JUnitRunner
-import org.scalatest.FunSuite
-import org.junit.runner.RunWith
 import com.twitter.concurrent.Broker
+import com.twitter.conversions.time._
+import com.twitter.finagle
 import com.twitter.finagle.{HttpWebSocket, Service}
+import com.twitter.io.Buf
 import com.twitter.util._
+import org.junit.runner.RunWith
+import org.scalatest.FunSuite
+import org.scalatest.junit.JUnitRunner
 import scala.collection.mutable.ArrayBuffer
 
 @RunWith(classOf[JUnitRunner])
 class EndToEndTest extends FunSuite {
+  import Frame._
+
   test("multi client") {
     var result = ""
     val binaryResult = ArrayBuffer.empty[Byte]
     val addr = RandomSocket()
     val latch = new CountDownLatch(10)
 
-    HttpWebSocket.serve(addr, new Service[WebSocket, WebSocket] {
-      def apply(req: WebSocket): Future[WebSocket] = {
-        val outgoing = new Broker[String]
-        val binaryOutgoing = new Broker[Array[Byte]]
-        val socket = req.copy(messages = outgoing.recv, binaryMessages = binaryOutgoing.recv)
-        req.messages foreach { msg =>
-          synchronized { result += msg }
-          latch.countDown()
+    finagle.Websocket.serve(addr, new Service[Request, Response] {
+      def apply(req: Request): Future[Response] = {
+        req.messages.foreach {
+          case Text(msg) =>
+            synchronized { result += msg }
+            latch.countDown()
+          case Binary(buf) =>
+            val binary = Buf.ByteArray.Owned.extract(buf)
+            synchronized { binaryResult ++= binary }
+            latch.countDown()
+          case _ =>
         }
-        req.binaryMessages foreach { binary =>
-          synchronized { binaryResult ++= binary }
-          latch.countDown()
-        }
-        Future.value(socket)
+        Future.value(Response(req.messages))
       }
     })
 

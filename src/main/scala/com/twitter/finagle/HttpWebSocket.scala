@@ -82,57 +82,14 @@ extends StdStackClient[WebSocket, WebSocket, WebSocketClient] {
     })))
 }
 
-object WebSocketServer {
-  val stack: Stack[ServiceFactory[WebSocket, WebSocket]] =
-    StackServer.newStack
-}
-
-case class WebSocketServer(
-  stack: Stack[ServiceFactory[WebSocket, WebSocket]] = WebSocketServer.stack,
-  params: Stack.Params = StackServer.defaultParams + ProtocolLibrary("websocket")
-) extends StdStackServer[WebSocket, WebSocket, WebSocketServer] {
-  protected type In = WebSocket
-  protected type Out = WebSocket
-
-  protected def newListener(): Listener[WebSocket, WebSocket] = {
-    val Label(label) = params[Label]
-    val pipeline = WebSocketCodec()
-      .server(ServerCodecConfig(label, new SocketAddress {}))
-      .pipelineFactory
-
-    Netty3Listener(pipeline, params)
-  }
-
-  protected def newDispatcher(
-    transport: Transport[WebSocket, WebSocket],
-    service: Service[WebSocket, WebSocket]) = {
-    val Stats(stats) = params[Stats]
-
-    new SerialServerDispatcher(transport, service)
-  }
-
-  protected def copy1(
-    stack: Stack[ServiceFactory[WebSocket, WebSocket]] = this.stack,
-    params: Stack.Params = this.params
-  ): WebSocketServer = copy(stack, params)
-
-  def withTls(cfg: Netty3ListenerTLSConfig): WebSocketServer =
-    configured(Transport.TLSServerEngine(Some(cfg.newEngine)))
-}
-
 object HttpWebSocket
 extends Client[WebSocket, WebSocket]
-with Server[WebSocket, WebSocket]
 with WebSocketRichClient {
   val client = WebSocketClient().configured(Label("websocket"))
-  val server = WebSocketServer().configured(Label("websocket"))
 
   def newClient(dest: Name, label: String) =
     client.newClient(dest, label)
 
   def newService(dest: Name, label: String) =
     client.newService(dest, label)
-
-  def serve(addr: SocketAddress, service: ServiceFactory[WebSocket, WebSocket]): ListeningServer =
-    server.serve(addr, service)
 }

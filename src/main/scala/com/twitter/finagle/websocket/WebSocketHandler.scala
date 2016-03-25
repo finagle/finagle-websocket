@@ -82,10 +82,10 @@ class WebSocketHandler extends SimpleChannelHandler {
   }
 }
 
-class WebSocketServerHandler extends WebSocketHandler {
+private[finagle] class WebSocketServerHandler extends SimpleChannelUpstreamHandler {
   private[this] var handshaker: Option[WebSocketServerHandshaker] = None
 
-  override def messageReceived(ctx: ChannelHandlerContext, e: MessageEvent) = {
+  override def messageReceived(ctx: ChannelHandlerContext, e: MessageEvent) =
     e.getMessage match {
       case req: HttpRequest =>
         val scheme = if(req.getUri.startsWith("wss")) "wss" else "ws"
@@ -95,64 +95,22 @@ class WebSocketServerHandler extends WebSocketHandler {
         handshaker match {
           case None =>
             wsFactory.sendUnsupportedWebSocketVersionResponse(ctx.getChannel)
-          case Some(h) =>
-            h.handshake(ctx.getChannel, req)
-
-            def close() { Channels.close(ctx.getChannel) }
-
-            val webSocket = WebSocket(
-              messages = messagesBroker.recv,
-              binaryMessages = binaryMessagesBroker.recv,
-              uri = new URI(req.getUri),
-              headers = req.headers.map(e => e.getKey -> e.getValue).toMap,
-              remoteAddress = ctx.getChannel.getRemoteAddress,
-              onClose = closer,
-              close = close)
-
-            Channels.fireMessageReceived(ctx, webSocket)
+          case Some(ref) =>
+            ref.handshake(ctx.getChannel, req)
+            val addr = ctx.getChannel.getRemoteAddress
+            Channels.fireMessageReceived(ctx, (req, addr))
         }
 
       case frame: CloseWebSocketFrame =>
-        handshaker foreach { _.close(ctx.getChannel, frame) }
+        handshaker.foreach(_.close(ctx.getChannel, frame))
 
-      case frame: PingWebSocketFrame =>
-        ctx.getChannel.write(new PongWebSocketFrame(frame.getBinaryData))
-
-      case frame: TextWebSocketFrame =>
-        val ch = ctx.getChannel
-        ch.setReadable(false)
-        (messagesBroker ! frame.getText) ensure { ch.setReadable(true) }
-
-      case frame: BinaryWebSocketFrame =>
-        val ch = ctx.getChannel
-        ch.setReadable(false)
-        (binaryMessagesBroker ! frame.getBinaryData.array) ensure { ch.setReadable(true) }
+      case frame: WebSocketFrame =>
+        Channels.fireMessageReceived(ctx, frame)
 
       case invalid =>
         Channels.fireExceptionCaught(ctx,
-          new IllegalArgumentException("invalid message \"%s\"".format(invalid)))
+          new IllegalArgumentException(s"invalid message: $invalid"))
     }
-  }
-
-  override def writeRequested(ctx: ChannelHandlerContext, e: MessageEvent) = {
-    e.getMessage match {
-      case sock: WebSocket =>
-        write(ctx, sock)
-
-      case _: HttpResponse =>
-        ctx.sendDownstream(e)
-
-      case _: PongWebSocketFrame =>
-        ctx.sendDownstream(e)
-
-      case _: CloseWebSocketFrame =>
-        ctx.sendDownstream(e)
-
-      case invalid =>
-        Channels.fireExceptionCaught(ctx,
-          new IllegalArgumentException("invalid message \"%s\"".format(invalid)))
-    }
-  }
 }
 
 class WebSocketClientHandler extends WebSocketHandler {
