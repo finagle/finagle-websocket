@@ -2,14 +2,13 @@ package com.twitter.finagle.websocket
 
 import com.twitter.concurrent.AsyncStream
 import com.twitter.finagle.Service
-import com.twitter.finagle.netty3.{BufChannelBuffer, ChannelBufferBuf}
 import com.twitter.finagle.stats.StatsReceiver
 import com.twitter.finagle.transport.Transport
 import com.twitter.io.Buf
 import com.twitter.util.{Closable, Future, Time}
 import java.net.{SocketAddress, URI}
 import org.jboss.netty.handler.codec.http.HttpRequest
-import org.jboss.netty.handler.codec.http.websocketx._
+import org.jboss.netty.handler.codec.http.websocketx.CloseWebSocketFrame
 import scala.collection.JavaConverters._
 
 private[finagle] class ServerDispatcher(
@@ -18,10 +17,13 @@ private[finagle] class ServerDispatcher(
     stats: StatsReceiver)
   extends Closable {
 
-  import ServerDispatcher._
+  import Netty3.{fromNetty, toNetty}
 
   private[this] def messages(): AsyncStream[Frame] =
-    AsyncStream.fromFuture(trans.read().map(fromNetty)) ++ messages()
+    AsyncStream.fromFuture(trans.read()).flatMap {
+      case _: CloseWebSocketFrame => AsyncStream.empty
+      case frame => fromNetty(frame) +:: messages()
+    }
 
   // The first item is a HttpRequest.
   trans.read().flatMap {
@@ -40,42 +42,4 @@ private[finagle] class ServerDispatcher(
   }
 
   def close(deadline: Time): Future[Unit] = trans.close()
-}
-
-private object ServerDispatcher {
-  import Frame._
-
-  def fromNetty(m: Any): Frame = m match {
-    case text: TextWebSocketFrame =>
-      Text(text.getText)
-
-    case cont: ContinuationWebSocketFrame =>
-      Text(cont.getText)
-
-    case bin: BinaryWebSocketFrame =>
-      Binary(new ChannelBufferBuf(bin.getBinaryData))
-
-    case ping: PingWebSocketFrame =>
-      Ping(new ChannelBufferBuf(ping.getBinaryData))
-
-    case pong: PongWebSocketFrame =>
-      Pong(new ChannelBufferBuf(pong.getBinaryData))
-
-    case frame =>
-      throw new IllegalStateException(s"unknown frame: $frame")
-  }
-
-  def toNetty(frame: Frame): WebSocketFrame = frame match {
-    case Text(message) =>
-      new TextWebSocketFrame(message)
-
-    case Binary(buf) =>
-      new BinaryWebSocketFrame(BufChannelBuffer(buf))
-
-    case Ping(buf) =>
-      new PingWebSocketFrame(BufChannelBuffer(buf))
-
-    case Pong(buf) =>
-      new PongWebSocketFrame(BufChannelBuffer(buf))
-  }
 }

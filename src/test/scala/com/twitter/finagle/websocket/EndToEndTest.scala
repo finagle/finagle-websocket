@@ -1,11 +1,14 @@
 package com.twitter.finagle.websocket
 
-import com.twitter.concurrent.Broker
+import com.twitter.concurrent.AsyncStream
 import com.twitter.conversions.time._
 import com.twitter.finagle
-import com.twitter.finagle.{HttpWebSocket, Service}
+import com.twitter.finagle.Service
+import com.twitter.finagle.param.Stats
+import com.twitter.finagle.stats.{NullStatsReceiver, StatsReceiver}
 import com.twitter.io.Buf
 import com.twitter.util._
+import java.net.{InetSocketAddress, SocketAddress, URI}
 import org.junit.runner.RunWith
 import org.scalatest.FunSuite
 import org.scalatest.junit.JUnitRunner
@@ -14,46 +17,45 @@ import scala.collection.mutable.ArrayBuffer
 @RunWith(classOf[JUnitRunner])
 class EndToEndTest extends FunSuite {
   import Frame._
-
-  test("multi client") {
-    var result = ""
-    val binaryResult = ArrayBuffer.empty[Byte]
-    val addr = RandomSocket()
-    val latch = new CountDownLatch(10)
-
-    finagle.Websocket.serve(addr, new Service[Request, Response] {
-      def apply(req: Request): Future[Response] = {
-        req.messages.foreach {
-          case Text(msg) =>
-            synchronized { result += msg }
-            latch.countDown()
-          case Binary(buf) =>
-            val binary = Buf.ByteArray.Owned.extract(buf)
-            synchronized { binaryResult ++= binary }
-            latch.countDown()
-          case _ =>
-        }
+  import EndToEndTest._
+  test("echo") {
+    val echo = new Service[Request, Response] {
+      def apply(req: Request): Future[Response] =
         Future.value(Response(req.messages))
-      }
-    })
-
-    val target = "ws://%s:%d/".format(addr.getHostName, addr.getPort)
-
-    val brokerPairs = (0 until 5) map { _ =>
-      val textOut = new Broker[String]
-      val binaryOut = new Broker[Array[Byte]]
-      Await.ready(HttpWebSocket.open(textOut.recv, binaryOut.recv, target))
-      (textOut, binaryOut)
     }
 
-    brokerPairs foreach { pair =>
-      val (textBroker, binaryBrocker) = pair
-      FuturePool.unboundedPool { textBroker !! "1" }
-      FuturePool.unboundedPool { binaryBrocker !! Array[Byte](0x01) }
+    connect(echo) { client =>
+      val frames = texts("hello", "world")
+      for {
+        response <- client(mkRequest("/", frames))
+        messages <- response.messages.toSeq()
+      } yield assert(messages == frames)
     }
-
-    latch.within(1.second)
-    assert(result === "11111")
-    assert(binaryResult === ArrayBuffer(0x01, 0x01, 0x01, 0x01, 0x01))
   }
+}
+
+private object EndToEndTest {
+  def connect(
+    service: Service[Request, Response],
+    stats: StatsReceiver = NullStatsReceiver
+  )(run: Service[Request, Response] => Future[Unit]): Unit = {
+    val server = finagle.Websocket.server
+      .withLabel("server")
+      .configured(Stats(stats))
+      .serve("localhost:*", service)
+
+    val addr = server.boundAddress.asInstanceOf[InetSocketAddress]
+
+    val client = finagle.Websocket.client
+      .configured(Stats(stats))
+      .newService(s"${addr.getHostName}:${addr.getPort}", "client")
+
+    Await.result(run(client).ensure(Closable.all(client, server).close()), 1.second)
+  }
+
+  def texts(messages: String*): Seq[Frame] =
+    messages.map(Frame.Text(_))
+
+  def mkRequest(path: String, frames: Seq[Frame]): Request =
+    Request(new URI(path), Map.empty, new SocketAddress{}, AsyncStream.fromSeq(frames))
 }
