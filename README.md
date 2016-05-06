@@ -40,29 +40,79 @@ sbt
 
     "com.github.sprsquish" %% "finagle-websockets" % "6.8.1"
 
+## Example
+
+The following client and server can be run by pasting the code into `sbt
+console`. The client sends "1" over to the server. The server responds by
+translating the numeral into an word (mostly). When the client receives this
+word, it will send back a number which represents the length of characters of
+the received word.
+
 ### Client
 
-    import com.twitter.finagle.HttpWebSocket
-    import com.twitter.concurrent.Broker
+```scala
+import com.twitter.concurrent.AsyncStream
+import com.twitter.conversions.time._
+import com.twitter.finagle.Websocket
+import com.twitter.finagle.util.DefaultTimer
+import com.twitter.finagle.websocket.{Frame, Request}
+import com.twitter.util.Promise
+import java.net.URI
 
-    val out = new Broker[String]
-    HttpWebSocket.open(out.recv, "ws://localhost:8080/") onSuccess { resp =>
-      resp.messages foreach println
-    }
+implicit val timer = DefaultTimer.twitter
+
+// Responds to messages from the server.
+def handler(messages: AsyncStream[Frame]): AsyncStream[Frame] =
+  messages.flatMap {
+    case Frame.Text(message) =>
+      // Print the received message.
+      println(message)
+
+      AsyncStream.fromFuture(
+        // Sleep for a second...
+        Future.sleep(1.second).map { _ =>
+          // ... and then send a message to the server.
+          Frame.Text(message.length.toString)
+        })
+
+    case _ => AsyncStream.of(Frame.Text("??"))
+  }
+
+val incoming = new Promise[AsyncStream[Frame]]
+val outgoing =
+  Frame.Text("1") +:: handler(
+    AsyncStream.fromFuture(incoming).flatten)
+
+val client = Websocket.client.newService(":14000")
+val req = Request(new URI("/"), Map.empty, null, outgoing)
+
+// Take the messages of the response and fulfill `incoming`.
+client(req).map(_.messages).proxyTo(incoming)
+```
 
 ### Server
 
-    import com.twitter.concurrent.Broker
-    import com.twitter.finagle.{HttpWebSocket, Service}
-    import com.twitter.finagle.websocket.WebSocket
-    import com.twitter.util.Future
-    import java.net.InetSocketAddress
+```scala
+import com.twitter.concurrent.AsyncStream
+import com.twitter.finagle.{Service, Websocket}
+import com.twitter.finagle.websocket.{Frame, Request, Response}
+import com.twitter.util.Future
 
-    val server = HttpWebSocket.serve(":8080", new Service[WebSocket, WebSocket] {
-      def apply(req: WebSocket): Future[WebSocket] = {
-        val outgoing = new Broker[String]
-        val socket = req.copy(messages = outgoing.recv)
-        req.messages foreach { outgoing ! _.reverse }
-        Future.value(socket)
-      }
-    })
+// A server that when given a number, responds with a word (mostly).
+def handler(messages: AsyncStream[Frame]): AsyncStream[Frame] = {
+  messages.map {
+    case Frame.Text("1") => Frame.Text("one")
+    case Frame.Text("2") => Frame.Text("two")
+    case Frame.Text("3") => Frame.Text("three")
+    case Frame.Text("4") => Frame.Text("cuatro")
+    case Frame.Text("5") => Frame.Text("five")
+    case Frame.Text("6") => Frame.Text("6")
+    case _ => Frame.Text("??")
+  }
+}
+
+Websocket.serve(":14000", new Service[Request, Response] {
+  def apply(req: Request): Future[Response] =
+    Future.value(Response(handler(req.messages)))
+})
+```
