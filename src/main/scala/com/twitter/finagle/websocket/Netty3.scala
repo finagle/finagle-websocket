@@ -4,10 +4,12 @@ import com.twitter.finagle.Stack
 import com.twitter.finagle.client.Transporter
 import com.twitter.finagle.netty3._
 import com.twitter.finagle.server.Listener
-import java.net.URI
-import org.jboss.netty.channel.{Channels, ChannelPipelineFactory}
+import java.net.{SocketAddress, URI}
+
+import org.jboss.netty.channel.{ChannelPipelineFactory, Channels}
 import org.jboss.netty.handler.codec.http._
 import org.jboss.netty.handler.codec.http.websocketx._
+
 import scala.collection.JavaConverters._
 
 private[finagle] object Netty3 {
@@ -34,10 +36,10 @@ private[finagle] object Netty3 {
       def getPipeline() = serverPipeline
     }, params)
 
-  def newTransporter[In, Out](params: Stack.Params): Transporter[In, Out] = {
+  def newTransporter[In, Out](addr: SocketAddress, params: Stack.Params): Transporter[In, Out] = {
     Netty3Transporter(new ChannelPipelineFactory {
       def getPipeline() = clientPipeline()
-    }, params)
+    }, addr, params)
   }
 
   def fromNetty(m: Any): Frame = m match {

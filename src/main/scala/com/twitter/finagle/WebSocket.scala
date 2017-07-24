@@ -2,40 +2,40 @@ package com.twitter.finagle
 
 import com.twitter.finagle.netty3._
 import com.twitter.finagle.param.{Label, ProtocolLibrary, Stats}
-import com.twitter.finagle.client.{Transporter, StdStackClient, StackClient}
-import com.twitter.finagle.server.{Listener, StdStackServer, StackServer}
+import com.twitter.finagle.client.{StackClient, StdStackClient, Transporter}
+import com.twitter.finagle.server.{Listener, StackServer, StdStackServer}
 import com.twitter.finagle.transport.Transport
-import com.twitter.finagle.websocket.{Netty3, ClientDispatcher, Request, Response, ServerDispatcher}
+import com.twitter.finagle.websocket.{ClientDispatcher, Netty3, Request, Response, ServerDispatcher}
 import com.twitter.util.Closable
 import java.net.SocketAddress
+
+import com.twitter.finagle.ssl.client.SslClientConfiguration
 import org.jboss.netty.channel.Channel
 
 object Websocket extends Server[Request, Response] {
-  case class Client(
-    stack: Stack[ServiceFactory[Request, Response]] = StackClient.newStack,
-    params: Stack.Params = StackClient.defaultParams + ProtocolLibrary("ws"))
+  case class Client(stack: Stack[ServiceFactory[Request, Response]] = StackClient.newStack,
+                    params: Stack.Params = StackClient.defaultParams + ProtocolLibrary("ws"))
   extends StdStackClient[Request, Response, Client] {
-    protected type In = Any
-    protected type Out = Any
+    override protected type In = Any
+    override protected type Out = Any
 
-    protected def newTransporter(): Transporter[In, Out] =
-      Netty3.newTransporter(params)
+    override protected def newTransporter(addr: SocketAddress): Transporter[In, Out] =
+      Netty3.newTransporter(addr, params)
 
-    protected def copy1(
+    override protected def copy1(
       stack: Stack[ServiceFactory[Request, Response]] = this.stack,
       params: Stack.Params = this.params
     ): Client = copy(stack, params)
 
-    protected def newDispatcher(transport: Transport[In, Out]): Service[Request, Response] =
+    override protected def newDispatcher(transport: Transport[In, Out]): Service[Request, Response] =
       new ClientDispatcher(transport)
 
     def withTlsWithoutValidation: Client = withTransport.tlsWithoutValidation
 
     def withTls(hostname: String): Client = withTransport.tls(hostname)
 
-    def withTls(cfg: Netty3TransporterTLSConfig): Client =
-      configured(Transport.TLSClientEngine(Some(cfg.newEngine))
-        ).configured(Transporter.TLSHostname(cfg.verifyHost))
+    def withTls(cfg: SslClientConfiguration): Client =
+      withTransport.tls.configured(Transport.ClientSsl(Some(cfg)))
   }
 
   val client: Client = Client()

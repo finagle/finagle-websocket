@@ -1,13 +1,14 @@
 language: scala
+dist: trusty
 sudo: false
+
 scala:
-  - 2.10.5
-  - 2.11.7
+  - 2.11.11
+  - 2.12.2
 
 jdk:
-  - oraclejdk7
   - oraclejdk8
-  - openjdk7
+  - openjdk8
 
 script: sbt ++$TRAVIS_SCALA_VERSION coverage test it:test
 after_success: sbt ++$TRAVIS_SCALA_VERSION coveralls

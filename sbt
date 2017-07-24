@@ -1,6 +1,6 @@
 #!/bin/bash
 
-sbtver=0.13.8
+sbtver=0.13.13
 sbtjar=sbt-launch.jar
 sbtsha128=57d0f04f4b48b11ef7e764f4cea58dee4e806ffd
 
