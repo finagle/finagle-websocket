@@ -4,8 +4,8 @@ import com.twitter.finagle.netty3._
 import com.twitter.finagle.param.{Label, ProtocolLibrary, Stats}
 import com.twitter.finagle.client.{StackClient, StdStackClient, Transporter}
 import com.twitter.finagle.server.{Listener, StackServer, StdStackServer}
-import com.twitter.finagle.transport.Transport
 import com.twitter.finagle.websocket.{ClientDispatcher, Netty3, Request, Response, ServerDispatcher}
+import com.twitter.finagle.transport.{Transport, TransportContext}
 import com.twitter.util.Closable
 import java.net.SocketAddress
 
@@ -18,8 +18,9 @@ object Websocket extends Server[Request, Response] {
   extends StdStackClient[Request, Response, Client] {
     override protected type In = Any
     override protected type Out = Any
+    override protected type Context = TransportContext
 
-    override protected def newTransporter(addr: SocketAddress): Transporter[In, Out] =
+    override protected def newTransporter(addr: SocketAddress): Transporter[In, Out, Context] =
       Netty3.newTransporter(addr, params)
 
     override protected def copy1(
@@ -27,7 +28,9 @@ object Websocket extends Server[Request, Response] {
       params: Stack.Params = this.params
     ): Client = copy(stack, params)
 
-    override protected def newDispatcher(transport: Transport[In, Out]): Service[Request, Response] =
+    override protected def newDispatcher(transport: Transport[In, Out] {
+      type Context <: TransportContext
+    }): Service[Request, Response] =
       new ClientDispatcher(transport)
 
     def withTlsWithoutValidation: Client = withTransport.tlsWithoutValidation
@@ -47,8 +50,9 @@ object Websocket extends Server[Request, Response] {
 
     protected type In = Any
     protected type Out = Any
+    protected type Context = TransportContext
 
-    protected def newListener(): Listener[In, Out] =
+    protected def newListener(): Listener[In, Out, Context] =
       Netty3.newListener(params)
 
     private[this] val statsReceiver = {
@@ -57,7 +61,7 @@ object Websocket extends Server[Request, Response] {
     }
 
     protected def newDispatcher(
-      transport: Transport[In, Out],
+      transport: Transport[In, Out] { type Context <: Server.this.Context },
       service: Service[Request, Response]
     ): Closable =
         new ServerDispatcher(transport, service, statsReceiver)
